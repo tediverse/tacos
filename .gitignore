@@ -1,0 +1,13 @@
+# Ignore environment variables
+.env
+
+# Python
+.venv
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# MacOS
+.DS_Store

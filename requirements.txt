@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pycouchdb
+python-frontmatter
+python-dotenv
+pydantic
