@@ -23,13 +23,13 @@ jobs:
       - name: Checkout fastapi code
         uses: actions/checkout@v4
 
-      - name: "Checkout deployment script"
+      - name: Checkout deployment script
         uses: actions/checkout@v4
         with:
           repository: ${{ env.CICD_REPO }}
           path: ./.cicd
 
-      - name: "Create .env file"
+      - name: Create .env file
         run: echo "${{ secrets.ENV_FILE }}" > .env
         shell: bash
 
@@ -39,12 +39,12 @@ jobs:
           ssh-keyscan -H ${{ secrets.LXC_HOST }} >> ~/.ssh/known_hosts
         shell: bash
 
-      - name: "Setup SSH Agent"
+      - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.GH_RUNNER_KEY }}
 
-      - name: "Deploy files using rsync"
+      - name: Deploy files using rsync
         run: |
           cp ./.cicd/${{ env.CICD_SCRIPT }} ./deploy.sh
 
@@ -55,11 +55,11 @@ jobs:
             . ${{ env.LXC_USER }}@${{ secrets.LXC_HOST }}:${{ env.APP_DIR }}
         shell: bash
 
-      - name: "Execute deployment script"
+      - name: Execute deployment script
         run: |
           ssh ${{ env.LXC_USER }}@${{ secrets.LXC_HOST }} \
           "export SERVICE_NAME='${{ env.SERVICE_NAME }}' && \
             export ALEMBIC_MIGRATE='${{ env.ALEMBIC_MIGRATE }}' && \
             cd ${{ env.APP_DIR }} && \
-            bash deploy.sh"```
+            bash deploy.sh"
         shell: bash
