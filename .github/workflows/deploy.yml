@@ -33,6 +33,12 @@ jobs:
         run: echo "${{ secrets.ENV_FILE }}" > .env
         shell: bash
 
+      - name: Add LXC host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.LXC_HOST }} >> ~/.ssh/known_hosts
+        shell: bash
+
       - name: "Setup SSH Agent"
         uses: webfactory/ssh-agent@v0.9.0
         with:
