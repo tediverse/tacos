@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from app.config import config
 from app.content_parser import ContentParser
 from app.models import PostDetail, PostSummary
+from app.utils import calculate_reading_time
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL.upper()))
@@ -28,11 +29,43 @@ except Exception as e:
     raise
 
 
+def parse_post_data(doc: dict, slug: str, include_content: bool = False) -> dict:
+    """Parse frontmatter and return standardized post data"""
+    try:
+        markdown = parser.get_content(doc, [])
+        parsed = frontmatter.loads(markdown)
+        metadata = parsed.metadata
+
+        # Calculate reading time
+        reading_time = calculate_reading_time(parsed.content)
+
+        post_data = {
+            "id": doc["_id"],
+            "slug": slug,
+            "title": metadata.get("title", slug.replace("-", " ").title()),
+            "summary": metadata.get("summary"),
+            "image": metadata.get("image"),
+            "publishedAt": metadata.get("publishedAt"),
+            "updatedAt": metadata.get("updatedAt"),
+            "tags": metadata.get("tags", []),
+            "readingTime": reading_time,
+        }
+
+        if include_content:
+            post_data["content"] = parsed.content
+
+        return post_data
+
+    except Exception as e:
+        logger.warning(f"Failed to parse post {slug}: {e}")
+        return None
+
+
 @app.get("/posts", response_model=List[PostSummary])
 def list_posts():
     try:
         all_docs = [row.get("doc", row) for row in db.all(include_docs=True)]
-        posts = []
+        posts: List[PostSummary] = []
 
         for doc in all_docs:
             if doc.get("type") != "plain" or not doc.get("path", "").startswith(
@@ -43,32 +76,15 @@ def list_posts():
             slug = (
                 doc.get("path", "").removeprefix(config.BLOG_PREFIX).removesuffix(".md")
             )
-            title = summary = published_at = None
-            tags = []
 
-            try:
-                markdown = parser.get_content(doc, all_docs)
-                if markdown:
-                    metadata = frontmatter.loads(markdown).metadata
-                    title = metadata.get("title")
-                    summary = metadata.get("summary")
-                    published_at = metadata.get("publishedAt")
-                    tags = metadata.get("tags", [])
-            except Exception as e:
-                logger.warning(f"Failed to parse frontmatter for {slug}: {e}")
+            post_data = parse_post_data(doc, slug, include_content=False)
+            if post_data:
+                posts.append(PostSummary(**post_data))
 
-            posts.append(
-                PostSummary(
-                    id=doc["_id"],
-                    slug=slug,
-                    title=title,
-                    summary=summary,
-                    publishedAt=published_at,
-                    tags=tags,
-                )
-            )
-
+        # Sort by publishedAt desc
+        posts.sort(key=lambda x: x.publishedAt or "0000-01-01", reverse=True)
         return posts
+
     except Exception as e:
         logger.error(f"Error listing posts: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve posts")
@@ -80,33 +96,17 @@ def get_post(slug: str):
     doc_id = f"{config.BLOG_PREFIX}{slug}.md"
 
     try:
-        # Fetch all docs and find the one matching the slug
-        all_docs = list(db.all(include_docs=True))
-        blog_doc = next(
-            (
-                row.get("doc", row)
-                for row in all_docs
-                if row.get("id") == doc_id or row.get("_id") == doc_id
-            ),
-            None,
-        )
+        all_docs = [row.get("doc", row) for row in db.all(include_docs=True)]
+        blog_doc = next((doc for doc in all_docs if doc.get("_id") == doc_id), None)
 
         if not blog_doc:
             raise HTTPException(status_code=404, detail="Post not found")
 
-        # Reconstruct content (handles linked attachments if any)
-        markdown = parser.get_content(blog_doc, all_docs)
-        parsed = frontmatter.loads(markdown)
+        post_data = parse_post_data(blog_doc, slug, include_content=True)
+        if not post_data:
+            raise HTTPException(status_code=500, detail="Failed to parse post")
 
-        return PostDetail(
-            id=doc_id,
-            title=parsed.metadata.get("title"),
-            summary=parsed.metadata.get("summary"),
-            image=parsed.metadata.get("image"),
-            publishedAt=parsed.metadata.get("publishedAt"),
-            tags=parsed.metadata.get("tags", []),
-            content=parsed.content,
-        )
+        return PostDetail(**post_data)
 
     except HTTPException:
         raise
