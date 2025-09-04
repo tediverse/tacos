@@ -69,6 +69,11 @@ def list_posts():
         posts: List[PostSummary] = []
 
         for doc in all_docs:
+            
+            # Skip deleted docs
+            if doc.get("deleted", False):
+                continue
+
             if doc.get("type") != "plain" or not doc.get("path", "").startswith(
                 config.BLOG_PREFIX
             ):
