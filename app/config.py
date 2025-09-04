@@ -16,6 +16,9 @@ class Config:
 
     # Blog Configuration
     BLOG_PREFIX = os.getenv("BLOG_PREFIX", "blog/")
+    BLOG_API_URL: str = os.getenv(
+        "BLOG_API_URL", "http://localhost:8000"
+    )
 
     # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

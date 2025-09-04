@@ -1,9 +1,12 @@
 import logging
+import re
+import urllib.parse
 from typing import List
 
 import frontmatter
 import pycouchdb
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import Response
 
 from app.config import config
 from app.content_parser import ContentParser
@@ -29,10 +32,89 @@ except Exception as e:
     raise
 
 
+def get_image_from_couchdb(image_path: str):
+    """
+    Retrieve an image from CouchDB using the ContentParser
+    """
+    try:
+        # Try to get the image metadata document
+        # First try with the exact path
+        try:
+            doc = db.get(image_path)
+        except pycouchdb.exceptions.NotFound:
+            # If not found, try URL-encoded version
+            encoded_path = urllib.parse.quote(image_path, safe="")
+            doc = db.get(encoded_path)
+
+        # Use the ContentParser to get the binary image data
+        image_data = parser.get_binary_content(doc)
+
+        if not image_data:
+            return None, None
+
+        # Try to determine content type from filename
+        if image_path.lower().endswith(".jpg") or image_path.lower().endswith(".jpeg"):
+            content_type = "image/jpeg"
+        elif image_path.lower().endswith(".png"):
+            content_type = "image/png"
+        elif image_path.lower().endswith(".gif"):
+            content_type = "image/gif"
+        elif image_path.lower().endswith(".svg"):
+            content_type = "image/svg+xml"
+        else:
+            content_type = "application/octet-stream"
+
+        return image_data, content_type
+
+    except pycouchdb.exceptions.NotFound:
+        logger.warning(f"Image not found in CouchDB: {image_path}")
+        return None, None
+    except Exception as e:
+        logger.error(f"Error retrieving image {image_path}: {e}")
+        return None, None
+
+
+OBSIDIAN_PATTERN = re.compile(r"!\[\[([^\]]+\.(?:png|jpg|jpeg|gif|svg|webp))\]\]")
+ABSOLUTE_PATH_PATTERN = re.compile(r"!\[\s*(.*?)\s*\]\(\s*/img/([^)]+)\s*\)")
+
+
+def process_image_references(content: str, base_url: str) -> str:
+    """
+    Process markdown content to update image references to use the FastAPI endpoint.
+    Uses pre-compiled regex patterns for better performance.
+    """
+    # Replace Obsidian image references like ![[image.png]] with standard markdown
+    content = OBSIDIAN_PATTERN.sub(r"![](" + base_url + r"/\1)", content)
+
+    # Replace absolute paths with our API endpoint
+    content = ABSOLUTE_PATH_PATTERN.sub(r"![\1](" + base_url + r"/\2)", content)
+
+    return content
+
+
+@app.get("/images/{image_path:path}")
+async def get_image(image_path: str):
+    """
+    Serve images directly from CouchDB
+    """
+    image_data, content_type = get_image_from_couchdb(image_path)
+
+    if not image_data or not content_type:
+        # Try with different path formats
+        if not image_path.startswith("img/"):
+            image_data, content_type = get_image_from_couchdb(f"img/{image_path}")
+
+        if not image_data or not content_type:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+    return Response(content=image_data, media_type=content_type)
+
+
 def parse_post_data(doc: dict, slug: str, include_content: bool = False) -> dict:
     """Parse frontmatter and return standardized post data"""
     try:
-        markdown = parser.get_content(doc, [])
+        # Use the ContentParser to get markdown content
+        markdown = parser.get_markdown_content(doc)
         parsed = frontmatter.loads(markdown)
         metadata = parsed.metadata
 
@@ -53,7 +135,15 @@ def parse_post_data(doc: dict, slug: str, include_content: bool = False) -> dict
         }
 
         if include_content:
-            post_data["content"] = parsed.content
+            # Process image references to point to our API
+            logger.debug(f"Original content before processing: {parsed.content}")
+            processed_content = process_image_references(
+                parsed.content, f"{config.BLOG_API_URL}/images"
+            )
+            logger.debug(
+                f"Processed content after image processing: {processed_content}"
+            )
+            post_data["content"] = processed_content
 
         return post_data
 
@@ -69,7 +159,7 @@ def list_posts():
         posts: List[PostSummary] = []
 
         for doc in all_docs:
-            
+
             # Skip deleted docs
             if doc.get("deleted", False):
                 continue
@@ -119,3 +209,11 @@ def get_post(slug: str):
     except Exception as e:
         logger.error(f"Error getting post {slug}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/test-image-processing")
+async def test_image_processing():
+    """Test endpoint to verify image processing works"""
+    test_content = "![Markdown Logo](/img/markdown.png)\n\n![[obsidian.png]]"
+    processed = process_image_references(test_content, "http://localhost:8000/images")
+    return {"original": test_content, "processed": processed}
