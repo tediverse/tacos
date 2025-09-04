@@ -1,4 +1,3 @@
-import base64
 import logging
 import re
 import urllib.parse
@@ -6,14 +5,14 @@ from typing import Optional, Tuple
 
 import pycouchdb
 
-from app.dependencies import db
+from app.dependencies import db, parser
 
 logger = logging.getLogger(__name__)
 
 
 def get_image_from_couchdb(image_path: str) -> Tuple[Optional[bytes], Optional[str]]:
     """
-    Retrieve an image from CouchDB
+    Retrieve an image from CouchDB using the ContentParser
     """
     try:
         # Try to get the image metadata document
@@ -25,8 +24,6 @@ def get_image_from_couchdb(image_path: str) -> Tuple[Optional[bytes], Optional[s
             doc = db.get(encoded_path)
 
         # Use the ContentParser to get the binary image data
-        from app.dependencies import parser
-
         image_data = parser.get_binary_content(doc)
 
         if not image_data:
@@ -39,11 +36,7 @@ def get_image_from_couchdb(image_path: str) -> Tuple[Optional[bytes], Optional[s
             logger.warning(
                 f"Image size mismatch for {image_path}. Expected: {expected_size}, Got: {len(image_data)}"
             )
-
-            # Try to manually reconstruct from children as a fallback
-            image_data = manually_reconstruct_image(doc)
-            if not image_data:
-                return None, None
+            return None, None
 
         # Determine content type from filename
         content_type = get_content_type_from_filename(image_path)
@@ -56,42 +49,6 @@ def get_image_from_couchdb(image_path: str) -> Tuple[Optional[bytes], Optional[s
     except Exception as e:
         logger.error(f"Error retrieving image {image_path}: {e}")
         return None, None
-
-
-def manually_reconstruct_image(doc: dict) -> Optional[bytes]:
-    """
-    Manually reconstruct image from children chunks as a fallback
-    """
-    try:
-        if "children" not in doc:
-            return None
-
-        children = doc["children"]
-        image_chunks = []
-
-        for child_id in children:
-            try:
-                child_doc = db.get(child_id)
-                if "data" in child_doc:
-                    # Decode base64 data
-                    chunk_data = base64.b64decode(child_doc["data"])
-                    image_chunks.append(chunk_data)
-            except Exception as e:
-                logger.error(f"Error retrieving child {child_id}: {e}")
-                continue
-
-        if image_chunks:
-            # Combine all chunks
-            image_data = b"".join(image_chunks)
-            logger.info(
-                f"Manually reconstructed image with {len(image_chunks)} chunks, total size: {len(image_data)}"
-            )
-            return image_data
-
-    except Exception as e:
-        logger.error(f"Error in manual image reconstruction: {e}")
-
-    return None
 
 
 def get_content_type_from_filename(filename: str) -> str:

@@ -12,7 +12,11 @@ class ContentParser:
 
     def get_markdown_content(self, doc: dict) -> str:
         """Get the full markdown content from a document (decoded as text)."""
-        return self._get_raw_content(doc) or ""
+        raw = self._get_raw_content(doc, is_binary=False)
+        if isinstance(raw, bytes):
+            # If somehow bytes slipped in, decode to string
+            return raw.decode("utf-8", errors="ignore")
+        return raw or ""
 
     def get_binary_content(self, doc: dict) -> bytes | None:
         """Get binary content from a document (decode base64 if needed)."""
