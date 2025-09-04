@@ -13,6 +13,7 @@ class PostSummary(BaseModel):
     updatedAt: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
     readingTime: Optional[str] = None
+    draft: bool = False
 
 
 class PostDetail(PostSummary):

@@ -49,6 +49,7 @@ def parse_post_data(doc: dict, slug: str, include_content: bool = False) -> dict
             "updatedAt": metadata.get("updatedAt"),
             "tags": metadata.get("tags", []),
             "readingTime": reading_time,
+            "draft": metadata.get("draft", False),
         }
 
         if include_content:
