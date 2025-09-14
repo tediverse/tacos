@@ -1,3 +1,4 @@
+import datetime
 import logging
 from typing import Dict, Optional
 
@@ -24,23 +25,14 @@ def parse_post_data(
         # Calculate reading time
         reading_time = calculate_reading_time(parsed.content)
 
-        # Convert date objects to strings if they exist
-        published_at = metadata.get("publishedAt")
-        if published_at and hasattr(published_at, 'isoformat'):
-            published_at = published_at.isoformat()
-        
-        updated_at = metadata.get("updatedAt")
-        if updated_at and hasattr(updated_at, 'isoformat'):
-            updated_at = updated_at.isoformat()
-
         post_data = {
             "id": doc["_id"],
             "slug": slug,
             "title": metadata.get("title", slug.replace("-", " ").title()),
             "summary": metadata.get("summary"),
             "image": metadata.get("image"),
-            "publishedAt": metadata.get("publishedAt"),
-            "updatedAt": metadata.get("updatedAt"),
+            "publishedAt": convert_date_to_string(metadata.get("publishedAt")),
+            "updatedAt": convert_date_to_string(metadata.get("updatedAt")),
             "tags": metadata.get("tags", []),
             "readingTime": reading_time,
             "draft": metadata.get("draft", False),
@@ -62,3 +54,9 @@ def parse_post_data(
     except Exception as e:
         logger.warning(f"Failed to parse post {slug}: {e}")
         return None
+
+
+def convert_date_to_string(value):
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.isoformat()
+    return value
