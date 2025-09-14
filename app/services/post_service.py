@@ -24,6 +24,15 @@ def parse_post_data(
         # Calculate reading time
         reading_time = calculate_reading_time(parsed.content)
 
+        # Convert date objects to strings if they exist
+        published_at = metadata.get("publishedAt")
+        if published_at and hasattr(published_at, 'isoformat'):
+            published_at = published_at.isoformat()
+        
+        updated_at = metadata.get("updatedAt")
+        if updated_at and hasattr(updated_at, 'isoformat'):
+            updated_at = updated_at.isoformat()
+
         post_data = {
             "id": doc["_id"],
             "slug": slug,
