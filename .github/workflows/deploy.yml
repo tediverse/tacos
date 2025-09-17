@@ -9,7 +9,7 @@ jobs:
   deploy:
     uses: tediverse/cicd/.github/workflows/deploy-fastapi.yml@main
     with:
-      service_name: tacos
+      service_name: tacos.service
       app_dir: /opt/tacos
       lxc_user: tacos
     secrets:
