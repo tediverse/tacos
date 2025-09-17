@@ -10,7 +10,7 @@ logging.basicConfig(level=getattr(logging, config.LOG_LEVEL.upper()))
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="tedawf_blog API", description="Simple FastAPI serving Obsidian blog posts"
+    title="TACOS API", description="Ted's AI Chatbot and Obsidian Sync"
 )
 
 app.include_router(images.router)
@@ -19,4 +19,4 @@ app.include_router(posts.router)
 
 @app.get("/")
 async def root():
-    return {"message": "tedawf_blog API is running"}
+    return {"message": "TACOS API is running"}

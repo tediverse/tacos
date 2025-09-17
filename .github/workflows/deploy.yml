@@ -1,4 +1,4 @@
-name: Deploy FastAPI app
+name: Deploy TACOS app
 
 on:
   push:
@@ -7,59 +7,12 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to homelab
-    runs-on: self-hosted
-
-    env:
-      CICD_REPO: "tediverse/homelab-cicd"
-      CICD_SCRIPT: "deploy-fastapi.sh"
-
-      LXC_USER: "fastapi"
-      SERVICE_NAME: "tedawf_blog.service"
-      APP_DIR: "/opt/tedawf_blog"
-      ALEMBIC_MIGRATE: "false"
-
-    steps:
-      - name: Checkout fastapi code
-        uses: actions/checkout@v4
-
-      - name: Checkout deployment script
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.CICD_REPO }}
-          path: ./.cicd
-
-      - name: Create .env file
-        run: echo "${{ secrets.ENV_FILE }}" > .env
-        shell: bash
-
-      - name: Add LXC host to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.LXC_HOST }} >> ~/.ssh/known_hosts
-        shell: bash
-
-      - name: Setup SSH agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.GH_RUNNER_KEY }}
-
-      - name: Deploy files using rsync
-        run: |
-          cp ./.cicd/${{ env.CICD_SCRIPT }} ./deploy.sh
-
-          rsync -avz --delete \
-            --exclude '.git*' \
-            --exclude '.github*' \
-            --exclude '.cicd' \
-            . ${{ env.LXC_USER }}@${{ secrets.LXC_HOST }}:${{ env.APP_DIR }}
-        shell: bash
-
-      - name: Execute deployment script
-        run: |
-          ssh ${{ env.LXC_USER }}@${{ secrets.LXC_HOST }} \
-          "export SERVICE_NAME='${{ env.SERVICE_NAME }}' && \
-            export ALEMBIC_MIGRATE='${{ env.ALEMBIC_MIGRATE }}' && \
-            cd ${{ env.APP_DIR }} && \
-            bash deploy.sh"
-        shell: bash
+    uses: tediverse/cicd/.github/workflows/deploy-fastapi.yml@main
+    with:
+      service_name: tacos
+      app_dir: /opt/tacos
+      lxc_user: tacos
+    secrets:
+      LXC_HOST: ${{ secrets.LXC_HOST }}
+      ENV_FILE: ${{ secrets.ENV_FILE }}
+      GH_RUNNER_KEY: ${{ secrets.GH_RUNNER_KEY }}
