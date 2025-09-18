@@ -8,3 +8,4 @@ alembic
 psycopg2-binary
 sqlalchemy
 pgvector
+openai

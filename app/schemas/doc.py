@@ -1,14 +1,21 @@
 import uuid
-from typing import List, Dict, Any
-from pydantic import BaseModel
+from typing import Any, Dict
 
-class DocSchema(BaseModel):
+from pydantic import BaseModel, Field
+
+
+class DocResult(BaseModel):
     id: uuid.UUID
     slug: str | None = None
     title: str | None = None
     content: str | None = None
     doc_metadata: Dict[str, Any] | None = None
-    embedding: List[float] | None = None
+    similarity: float = Field(
+        ...,
+        ge=0,
+        le=1,
+        description="The cosine similarity score between the query and the document.",
+    )
 
     class Config:
         from_attributes = True
