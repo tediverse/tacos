@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI
 
 from app.config import config
-from app.routers import images, posts
+from app.routers import images, posts, rag
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL.upper()))
@@ -15,6 +15,7 @@ app = FastAPI(
 
 app.include_router(images.router)
 app.include_router(posts.router)
+app.include_router(rag.router)
 
 
 @app.get("/")

@@ -4,8 +4,8 @@ from typing import List
 from fastapi import APIRouter, HTTPException
 
 from app.config import config
-from app.dependencies import db
-from app.models import PostDetail, PostSummary
+from app.db.couchdb import db
+from app.schemas.blog import PostDetail, PostSummary
 from app.services.post_service import parse_post_data
 
 logger = logging.getLogger(__name__)

@@ -5,7 +5,7 @@ from typing import Dict, Optional
 import frontmatter
 
 from app.config import config
-from app.dependencies import parser
+from app.db.couchdb import parser
 from app.services.image_service import process_image_references
 from app.utils import calculate_reading_time
 
