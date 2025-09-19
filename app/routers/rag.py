@@ -1,7 +1,9 @@
 import logging
-from typing import List
+from typing import AsyncGenerator, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
 from app.db.postgres.base import get_db
@@ -11,6 +13,61 @@ from app.services.text_embedder import embed_text
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+client = AsyncOpenAI()
+
+
+@router.post("/prompt")
+async def prompt_rag(
+    question: str = Query(..., min_length=1), db: Session = Depends(get_db)
+):
+    """
+    Prompt endpoint for RAG-powered chatbot.
+    Streams the OpenAI response using relevant blog context.
+    """
+    try:
+        # Get query embedding
+        embedding = embed_text(question)
+
+        # Fetch top 5 relevant docs
+        distance = Doc.embedding.cosine_distance(embedding)
+        similarity = (1 - distance).label("similarity")
+        results = (
+            db.query(Doc, similarity)
+            .filter(Doc.embedding.isnot(None))
+            .order_by(similarity.desc())
+            .limit(5)
+            .all()
+        )
+
+        context = "\n\n".join([doc.content for doc, _ in results])
+
+        # Prepare system + user prompt
+        system_prompt = f"You are an AI assistant. Use the following blog content to answer the question:\n{context}"
+        user_prompt = question
+
+        # 4️⃣ Stream OpenAI response
+        async def streamer() -> AsyncGenerator[str, None]:
+            try:
+                stream = await client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    stream=True,
+                )
+                async for chunk in stream:
+                    if chunk.choices[0].delta.content is not None:
+                        yield chunk.choices[0].delta.content
+            except Exception as e:
+                logger.error(f"Error streaming OpenAI response: {e}")
+                yield f"\n[Error: {e}]"
+
+        return StreamingResponse(streamer(), media_type="text/plain")
+
+    except Exception as e:
+        logger.error(f"Error in prompt_rag: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/query", response_model=List[DocResult])
