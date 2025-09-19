@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from app.db.postgres.base import get_db
 from app.models.doc import Doc
 from app.schemas.doc import DocResult
+from app.schemas.rag import PromptRequest
+from app.services.rag_service import RAGService
 from app.services.text_embedder import embed_text
 
 router = APIRouter()
@@ -16,58 +18,28 @@ logger = logging.getLogger(__name__)
 client = AsyncOpenAI()
 
 
+def get_rag_service(db: Session = Depends(get_db)) -> RAGService:
+    return RAGService(db)
+
+
 @router.post("/prompt")
 async def prompt_rag(
-    question: str = Query(..., min_length=1), db: Session = Depends(get_db)
+    request: PromptRequest, rag_service: RAGService = Depends(get_rag_service)
 ):
     """
-    Prompt endpoint for RAG-powered chatbot.
-    Streams the OpenAI response using relevant blog context.
+    Prompt endpoint for RAG chatbot.
+    Accepts a list of messages and streams back the response.
     """
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="No messages provided")
+
     try:
-        # Get query embedding
-        embedding = embed_text(question)
-
-        # Fetch top 5 relevant docs
-        distance = Doc.embedding.cosine_distance(embedding)
-        similarity = (1 - distance).label("similarity")
-        results = (
-            db.query(Doc, similarity)
-            .filter(Doc.embedding.isnot(None))
-            .order_by(similarity.desc())
-            .limit(5)
-            .all()
-        )
-
-        context = "\n\n".join([doc.content for doc, _ in results])
-
-        # Prepare system + user prompt
-        system_prompt = f"You are an AI assistant. Use the following blog content to answer the question:\n{context}"
-        user_prompt = question
-
-        # 4️⃣ Stream OpenAI response
-        async def streamer() -> AsyncGenerator[str, None]:
-            try:
-                stream = await client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    stream=True,
-                )
-                async for chunk in stream:
-                    if chunk.choices[0].delta.content is not None:
-                        yield chunk.choices[0].delta.content
-            except Exception as e:
-                logger.error(f"Error streaming OpenAI response: {e}")
-                yield f"\n[Error: {e}]"
-
-        return StreamingResponse(streamer(), media_type="text/plain")
+        streamer = rag_service.stream_chat_response(request.messages)
+        return StreamingResponse(streamer, media_type="text/plain")
 
     except Exception as e:
-        logger.error(f"Error in prompt_rag: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error in /prompt endpoint: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred.")
 
 
 @router.get("/query", response_model=List[DocResult])
@@ -76,66 +48,35 @@ def query_docs(
     limit: int = Query(5, ge=1, le=50),
     threshold: float = Query(0.2, ge=0.0, le=1.0),
     debug: bool = Query(False),
-    db: Session = Depends(get_db),
+    rag_service: RAGService = Depends(get_rag_service),
 ):
     """
     Perform semantic search with cosine similarity.
     Returns ranked document chunks above the similarity threshold.
     """
     try:
-        query_embedding = get_query_embedding(q)
-
-        distance = Doc.embedding.cosine_distance(query_embedding)
-        similarity = (1 - distance).label("similarity")
-
-        results = (
-            db.query(Doc, similarity)
-            .filter(Doc.embedding.isnot(None))
-            .filter(similarity >= threshold)
-            .order_by(similarity.desc())
-            .limit(limit)
-            .all()
+        results = rag_service.get_relevant_documents(
+            query=q, limit=limit, threshold=threshold
         )
 
         if debug:
-            # lightweight debug output
+            # For debug, we return a list of dicts with truncated content
             return [
                 {
                     "id": str(doc.id),
                     "title": doc.title,
                     "content": truncate(doc.content, 100),
-                    "similarity": round(sim, 4),
+                    "similarity": doc.similarity,
                 }
-                for doc, sim in results
+                for doc in results
             ]
 
         # normal API output (validated)
-        return [
-            DocResult.model_validate(
-                {
-                    "id": doc.id,
-                    "slug": doc.slug,
-                    "title": doc.title,
-                    "content": doc.content,
-                    "doc_metadata": doc.doc_metadata,
-                    "similarity": round(sim, 4),
-                }
-            )
-            for doc, sim in results
-        ]
+        return results
 
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error during vector search: {e}")
-        raise HTTPException(500, "Internal error during search")
-
-
-def get_query_embedding(q: str) -> list[float]:
-    embedding = embed_text(q)
-    if not embedding or len(embedding) != 1536:
-        raise HTTPException(400, "Invalid embedding for query")
-    return embedding
+        logger.error(f"Error in /query endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def truncate(text: str | None, length: int) -> str | None:

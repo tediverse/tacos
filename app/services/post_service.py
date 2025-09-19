@@ -1,5 +1,6 @@
 import datetime
 import logging
+import math
 from typing import Dict, Optional
 
 import frontmatter
@@ -7,7 +8,6 @@ import frontmatter
 from app.config import config
 from app.db.couchdb import parser
 from app.services.image_service import process_image_references
-from app.utils import calculate_reading_time
 
 logger = logging.getLogger(__name__)
 
@@ -88,3 +88,9 @@ def process_frontmatter_image(image_path: str, base_url: str) -> str:
         return f"{base_url}/{filename}"
 
     return image_path
+
+
+def calculate_reading_time(text: str) -> str:
+    words = text.split()
+    minutes = math.ceil(len(words) / 200) or 1
+    return f"{minutes} min"
