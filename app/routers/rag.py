@@ -4,7 +4,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.db.postgres import get_db
+from app.db.postgres.base import get_db
 from app.models.doc import Doc
 from app.schemas.doc import DocResult
 from app.services.text_embedder import embed_text

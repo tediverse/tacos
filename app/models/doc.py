@@ -1,9 +1,9 @@
 import uuid
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import JSON, UUID, Column, Text
+from sqlalchemy import JSON, UUID, Column, DateTime, Text, func
 
-from app.db.postgres import Base
+from app.db.postgres.base import Base
 
 
 class Doc(Base):
@@ -18,3 +18,10 @@ class Doc(Base):
     content = Column(Text)
     doc_metadata = Column("metadata", JSON, key="metadata")
     embedding = Column(Vector(1536))  # text-embedding-3-small
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )
