@@ -64,11 +64,13 @@ def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
 
 
 def ingest_all(db: Session):
-    """One-time ingestion of all CouchDB docs (skips deleted)."""
+    """One-time ingestion of all CouchDB docs. Also removes deleted docs."""
     all_docs = [row.get("doc", row) for row in parser.db.all(include_docs=True)]
     for doc in all_docs:
-        # Skip deleted docs
+        # Remove deleted docs from Postgres
         if doc.get("deleted", False):
+            db.query(Doc).filter(Doc.document_id == doc["_id"]).delete()
+            db.commit()
             continue
 
         # Only ingest "plain" type blog posts

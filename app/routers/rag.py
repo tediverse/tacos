@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.db.postgres.base import get_db
 from app.schemas.doc import DocResult
 from app.schemas.rag import PromptRequest
+from app.services.docs_ingester import ingest_all
 from app.services.rag_service import RAGService
 
 router = APIRouter()
@@ -39,6 +40,19 @@ async def prompt_rag(
     except Exception as e:
         logger.error(f"Error in /prompt endpoint: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred.")
+    
+@router.post("/reingest")
+def reingest(db: Session = Depends(get_db)):
+    """
+    Full ingestion/reset endpoint.
+    Deletes old docs and re-ingests all CouchDB content.
+    """
+    try:
+        ingest_all(db)
+        return {"status": "success", "message": "Full ingestion/reset completed."}
+    except Exception as e:
+        logger.error(f"Reset ingest failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Full ingestion failed")
 
 
 @router.get("/query", response_model=List[DocResult])
