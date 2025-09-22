@@ -1,5 +1,5 @@
 import logging
-from typing import AsyncGenerator, List
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -7,11 +7,9 @@ from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
 from app.db.postgres.base import get_db
-from app.models.doc import Doc
 from app.schemas.doc import DocResult
 from app.schemas.rag import PromptRequest
 from app.services.rag_service import RAGService
-from app.services.text_embedder import embed_text
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,6 +32,7 @@ async def prompt_rag(
         raise HTTPException(status_code=400, detail="No messages provided")
 
     try:
+        logger.debug(f"Received prompt request with {len(request.messages)} messages.")
         streamer = rag_service.stream_chat_response(request.messages)
         return StreamingResponse(streamer, media_type="text/plain")
 
