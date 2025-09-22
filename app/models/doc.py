@@ -1,0 +1,27 @@
+import uuid
+
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, UUID, Column, DateTime, Text, func
+
+from app.db.postgres.base import Base
+
+
+class Doc(Base):
+    __tablename__ = "docs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(Text, index=True)  # CouchDB _id
+    chunk_id = Column(UUID(as_uuid=True), unique=True, default=uuid.uuid4)
+
+    slug = Column(Text, index=True)
+    title = Column(Text)
+    content = Column(Text)
+    doc_metadata = Column("metadata", JSON, key="metadata")
+    embedding = Column(Vector(1536))  # text-embedding-3-small
+
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )

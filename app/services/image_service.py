@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 
 import pycouchdb
 
-from app.dependencies import db, parser
+from app.db.couchdb import db, parser
 
 logger = logging.getLogger(__name__)
 

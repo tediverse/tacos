@@ -1,0 +1,84 @@
+import logging
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from openai import AsyncOpenAI
+from sqlalchemy.orm import Session
+
+from app.db.postgres.base import get_db
+from app.schemas.doc import DocResult
+from app.schemas.rag import PromptRequest
+from app.services.rag_service import RAGService
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+client = AsyncOpenAI()
+
+
+def get_rag_service(db: Session = Depends(get_db)) -> RAGService:
+    return RAGService(db)
+
+
+@router.post("/prompt")
+async def prompt_rag(
+    request: PromptRequest, rag_service: RAGService = Depends(get_rag_service)
+):
+    """
+    Prompt endpoint for RAG chatbot.
+    Accepts a list of messages and streams back the response.
+    """
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="No messages provided")
+
+    try:
+        logger.debug(f"Received prompt request with {len(request.messages)} messages.")
+        streamer = rag_service.stream_chat_response(request.messages)
+        return StreamingResponse(streamer, media_type="text/plain")
+
+    except Exception as e:
+        logger.error(f"Error in /prompt endpoint: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred.")
+
+
+@router.get("/query", response_model=List[DocResult])
+def query_docs(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(5, ge=1, le=50),
+    threshold: float = Query(0.2, ge=0.0, le=1.0),
+    debug: bool = Query(False),
+    rag_service: RAGService = Depends(get_rag_service),
+):
+    """
+    Perform semantic search with cosine similarity.
+    Returns ranked document chunks above the similarity threshold.
+    """
+    try:
+        results = rag_service.get_relevant_documents(
+            query=q, limit=limit, threshold=threshold
+        )
+
+        if debug:
+            # For debug, we return a list of dicts with truncated content
+            return [
+                {
+                    "id": str(doc.id),
+                    "title": doc.title,
+                    "content": truncate(doc.content, 100),
+                    "similarity": doc.similarity,
+                }
+                for doc in results
+            ]
+
+        # normal API output (validated)
+        return results
+
+    except Exception as e:
+        logger.error(f"Error in /query endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def truncate(text: str | None, length: int) -> str | None:
+    if not text:
+        return None
+    return text if len(text) <= length else text[:length] + "..."

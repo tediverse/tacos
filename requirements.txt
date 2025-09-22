@@ -4,3 +4,8 @@ pycouchdb
 python-frontmatter
 python-dotenv
 pydantic
+alembic
+psycopg2-binary
+sqlalchemy
+pgvector
+openai
