@@ -1,10 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from app.config import config
 from app.routers import images, posts, rag
+from app.security import get_api_key
 from app.services.couchdb_listener import start_listener, stop_listener
 
 # Configure logging
@@ -33,8 +34,8 @@ async def lifespan(app: FastAPI):
 app.router.lifespan_context = lifespan
 
 app.include_router(images.router)
-app.include_router(posts.router)
-app.include_router(rag.router)
+app.include_router(posts.router, dependencies=[Depends(get_api_key)])
+app.include_router(rag.router, dependencies=[Depends(get_api_key)])
 
 
 @app.get("/")
