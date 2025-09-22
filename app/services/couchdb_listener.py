@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.config import config
 from app.db.postgres.base import SessionLocal
 from app.db.postgres.last_seq_queries import get_last_seq, update_last_seq
+from app.models.doc import Doc
 from app.services.docs_ingester import ingest_doc
 
 logger = logging.getLogger(__name__)
@@ -78,8 +79,12 @@ def process_change(change: dict, db_session: Session):
         logger.debug(f"No doc in change {change.get('id')}")
         return
 
+    doc_id = doc.get("_id")
     if doc.get("deleted", False):
-        logger.info(f"Skipping deleted doc {doc['_id']}")
+        # Delete from Postgres
+        deleted_count = db_session.query(Doc).filter(Doc.document_id == doc_id).delete()
+        db_session.commit()
+        logger.info(f"Deleted {deleted_count} chunks for doc {doc_id}")
         return
 
     if doc.get("type") != "plain" or not doc.get("path", "").startswith(
