@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.config import config
 from app.db.couchdb import parser
 from app.models.doc import Doc
+from app.services.post_service import parse_post_data
 from app.services.text_embedder import embed_text
 
 logger = logging.getLogger(__name__)
@@ -14,13 +15,16 @@ logger = logging.getLogger(__name__)
 def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
     """Ingest a single CouchDB doc into Postgres with chunking + embedding."""
 
-    content = parser.get_markdown_content(raw_doc)
-    if not content:
-        logger.warning(f"Skipped doc {raw_doc.get('_id')} (no content)")
+    # Parse via post_service (includes frontmatter handling)
+    slug = raw_doc.get("path") or raw_doc["_id"]
+    post_data = parse_post_data(raw_doc, slug, include_content=True)
+    if not post_data or not post_data.get("content"):
+        logger.warning(f"Skipped doc {slug} (no content after parsing)")
         return None
 
-    slug = raw_doc.get("slug") or raw_doc["_id"]
-    title = raw_doc.get("title", slug)
+    content = post_data["content"]
+    title = post_data.get("title", slug)
+    slug = post_data.get("slug")
 
     # Chunk + embed
     chunks = chunk_text(content, chunk_size=500, overlap=50)
@@ -38,9 +42,13 @@ def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
                     content=chunk,
                     embedding=embedding,
                     doc_metadata={
-                        "tags": raw_doc.get("tags"),
-                        "created_at": raw_doc.get("created_at"),
-                        "updated_at": raw_doc.get("updated_at"),
+                        "tags": post_data.get("tags", []),
+                        "created_at": post_data.get("publishedAt"),
+                        "updated_at": post_data.get("updatedAt"),
+                        "summary": post_data.get("summary"),
+                        "source": (
+                            "blog" if slug.startswith(config.BLOG_PREFIX) else "kb"
+                        ),
                     },
                 )
             )
@@ -73,9 +81,14 @@ def ingest_all(db: Session):
             db.commit()
             continue
 
-        # Only ingest "plain" type blog posts
-        if doc.get("type") != "plain" or not doc.get("path", "").startswith(
-            config.BLOG_PREFIX
+        # Only ingest "plain" types, meaning markdown files
+        if doc.get("type") != "plain":
+            continue
+
+        # Only ingest docs under specific paths
+        path = doc.get("path", "")
+        if not (
+            path.startswith(config.BLOG_PREFIX) or path.startswith(config.KB_PREFIX)
         ):
             continue
 

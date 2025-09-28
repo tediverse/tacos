@@ -87,10 +87,13 @@ def process_change(change: dict, db_session: Session):
         logger.info(f"Deleted {deleted_count} chunks for doc {doc_id}")
         return
 
-    if doc.get("type") != "plain" or not doc.get("path", "").startswith(
-        config.BLOG_PREFIX
-    ):
-        logger.debug(f"Skipping non-blog or non-plain doc {doc['_id']}")
+    if doc.get("type") != "plain":
+        logger.debug(f"Skipping non-plain doc {doc['_id']}")
+        return
+
+    path = doc.get("path", "")
+    if not (path.startswith(config.BLOG_PREFIX) or path.startswith(config.KB_PREFIX)):
+        logger.debug(f"Skipping doc outside blog/kb paths {doc['_id']}")
         return
 
     try:
