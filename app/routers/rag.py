@@ -40,7 +40,8 @@ async def prompt_rag(
     except Exception as e:
         logger.error(f"Error in /prompt endpoint: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred.")
-    
+
+
 @router.post("/reingest")
 def reingest(db: Session = Depends(get_db)):
     """
@@ -49,10 +50,10 @@ def reingest(db: Session = Depends(get_db)):
     """
     try:
         ingest_all(db)
-        return {"status": "success", "message": "Full ingestion/reset completed."}
+        return {"status": "success", "message": "ingestion completed."}
     except Exception as e:
         logger.error(f"Reset ingest failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Full ingestion failed")
+        raise HTTPException(status_code=500, detail="ingestion failed")
 
 
 @router.get("/query", response_model=List[DocResult])

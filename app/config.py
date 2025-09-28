@@ -31,6 +31,9 @@ class Config:
     # Our own API Key
     TACOS_API_KEY: str = os.getenv("TACOS_API_KEY", "")
 
+    # Knowledge Base
+    KB_PREFIX = os.getenv("KNOWLEDGE_BASE_PREFIX", "kb/")
+
     @property
     def couchdb_url(self) -> str:
         return f"http://{self.COUCHDB_USERNAME}:{self.COUCHDB_PASSWORD}@{self.COUCHDB_HOST}:{self.COUCHDB_PORT}"
