@@ -15,9 +15,8 @@ logger = logging.getLogger(__name__)
 def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
     """Ingest a single CouchDB doc into Postgres with chunking + embedding."""
 
-    slug = raw_doc.get("path") or raw_doc["_id"]
-
     # Parse via post_service (includes frontmatter handling)
+    slug = raw_doc.get("path") or raw_doc["_id"]
     post_data = parse_post_data(raw_doc, slug, include_content=True)
     if not post_data or not post_data.get("content"):
         logger.warning(f"Skipped doc {slug} (no content after parsing)")
@@ -25,6 +24,7 @@ def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
 
     content = post_data["content"]
     title = post_data.get("title", slug)
+    slug = post_data.get("slug")
 
     # Chunk + embed
     chunks = chunk_text(content, chunk_size=500, overlap=50)

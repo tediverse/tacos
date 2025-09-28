@@ -1,6 +1,7 @@
 import datetime
 import logging
 import math
+import os
 from typing import Dict, Optional
 
 import frontmatter
@@ -19,6 +20,10 @@ def parse_post_data(
     try:
         # Use the ContentParser to get markdown content
         markdown = parser.get_markdown_content(doc)
+        if not markdown:
+            logger.warning(f"No markdown content found for post {slug}")
+            return None
+
         parsed = frontmatter.loads(markdown)
         metadata = parsed.metadata
 
@@ -37,10 +42,14 @@ def parse_post_data(
         else:
             processed_image = None
 
+        # Normalize slug (remove extension, humanize)
+        slug = normalize_slug(slug)
+        title = derive_title(metadata, slug)
+
         post_data = {
             "id": doc["_id"],
             "slug": slug,
-            "title": metadata.get("title", slug.replace("-", " ").title()),
+            "title": title,
             "summary": metadata.get("summary"),
             "image": processed_image,
             "publishedAt": convert_date_to_string(metadata.get("publishedAt")),
@@ -66,6 +75,22 @@ def parse_post_data(
     except Exception as e:
         logger.warning(f"Failed to parse post {slug}: {e}")
         return None
+
+
+def normalize_slug(slug: str) -> str:
+    """Remove extension and normalize slug for display / navigation."""
+    base, _ = os.path.splitext(slug)
+    return base
+
+
+def derive_title(metadata: dict, slug: str) -> str:
+    """Get human-readable title for blog or KB note."""
+    if metadata and metadata.get("title"):
+        return metadata["title"]
+    # For KB notes, convert filename to title
+    clean_slug = slug.split("/", 1)[-1]  # Remove prefix (blog/ or kb/)
+    clean_slug = clean_slug.replace("-", " ").replace("_", " ")
+    return clean_slug.title()
 
 
 def convert_date_to_string(value):
