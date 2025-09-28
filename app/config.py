@@ -2,8 +2,11 @@ import os
 
 from dotenv import load_dotenv
 
-# Load from .env file
-load_dotenv()
+# Load local env in dev, or .env in prod
+if os.path.exists(".env.local"):
+    load_dotenv(".env.local")
+else:
+    load_dotenv(".env")
 
 
 class Config:
@@ -24,6 +27,7 @@ class Config:
     # Blog
     BLOG_PREFIX = os.getenv("BLOG_PREFIX", "blog/")
     BLOG_API_URL: str = os.getenv("BLOG_API_URL", "http://localhost:8000")
+    BASE_BLOG_URL: str = os.getenv("BASE_BLOG_URL", "http://localhost:3000")
 
     # Logging
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
