@@ -12,6 +12,7 @@ from app.config import config
 from app.models.doc import Doc
 from app.schemas.doc import DocResult
 from app.schemas.rag import ChatMessage, ContentChunk
+from app.services.query_expander import query_expander
 from app.services.text_embedder import embed_text
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,9 @@ class RAGService:
         """
 
         try:
-            embedding = embed_text(query)
+            # Expand query to improve semantic matching
+            expanded_query = query_expander.expand_query(query)
+            embedding = embed_text(expanded_query)
             if not embedding or len(embedding) != 1536:
                 raise HTTPException(400, "Invalid embedding for query")
 
