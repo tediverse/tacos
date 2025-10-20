@@ -26,7 +26,7 @@ class RAGService:
         self.db = db
 
     def get_relevant_documents(
-        self, query: str, limit: int = 5, threshold: float = 0.2
+        self, query: str, limit: int = 10, threshold: float = 0.1
     ) -> List[DocResult]:
         """
         Embeds a query and performs semantic search with cosine similarity.

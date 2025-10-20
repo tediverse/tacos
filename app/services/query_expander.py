@@ -29,8 +29,10 @@ class QueryExpander:
             "past": ["past", "previous", "earlier", "before"],
             
             # Education-related terms
-            "education": ["education", "school", "university", "college", "degree"],
-            "school": ["school", "education", "university", "college"],
+            "education": ["education", "school", "university", "college", "degree", "study"],
+            "school": ["school", "education", "university", "college", "study"],
+            "university": ["university", "college", "education", "school", "degree", "study"],
+            "study": ["study", "education", "school", "university", "learning", "degree"],
             
             # Project-related terms
             "project": ["project", "work", "development", "build", "create"],
