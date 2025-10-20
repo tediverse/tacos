@@ -12,6 +12,7 @@ from app.config import config
 from app.models.doc import Doc
 from app.schemas.doc import DocResult
 from app.schemas.rag import ChatMessage, ContentChunk
+from app.services.content_enhancer import content_enhancer
 from app.services.query_expander import query_expander
 from app.services.text_embedder import embed_text
 
@@ -203,8 +204,15 @@ class RAGService:
                     else:
                         logger.debug(f"New content: {document_id}")
 
-                    # Generate embedding for the content (only for new/changed content)
-                    embedding = embed_text(chunk.content)
+                    # Enhance content with metadata before embedding
+                    enhanced_content = content_enhancer.enhance_content(
+                        content=chunk.content,
+                        title=chunk.title,
+                        metadata=chunk.metadata or {}
+                    )
+                    
+                    # Generate embedding for the enhanced content (only for new/changed content)
+                    embedding = embed_text(enhanced_content)
 
                     if existing_doc:
                         # Update existing document

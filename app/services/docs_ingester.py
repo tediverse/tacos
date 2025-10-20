@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.config import config
 from app.db.couchdb import parser
 from app.models.doc import Doc
+from app.services import content_enhancer
 from app.services.post_service import parse_post_data
 from app.services.text_embedder import embed_text
 
@@ -33,13 +34,22 @@ def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
 
     for chunk in chunks:
         try:
-            embedding = embed_text(chunk)
+            # Enhance content with metadata before embedding
+            enhanced_content = content_enhancer.enhance_content(
+                content=chunk,
+                title=title,
+                metadata={
+                    "tags": post_data.get("tags", []),
+                    "summary": post_data.get("summary"),
+                },
+            )
+            embedding = embed_text(enhanced_content)
             new_docs.append(
                 Doc(
                     document_id=raw_doc["_id"],
                     slug=slug,
                     title=title,
-                    content=chunk,
+                    content=chunk,  # Store original content for display
                     embedding=embedding,
                     doc_metadata={
                         "tags": post_data.get("tags", []),
