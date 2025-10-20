@@ -1,6 +1,8 @@
+import hashlib
+import json
 import logging
 from datetime import datetime
-from typing import List
+from typing import Any, Dict, List
 
 from fastapi import HTTPException
 from openai import AsyncOpenAI
@@ -9,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import config
 from app.models.doc import Doc
 from app.schemas.doc import DocResult
-from app.schemas.rag import ChatMessage
+from app.schemas.rag import ChatMessage, ContentChunk
 from app.services.text_embedder import embed_text
 
 logger = logging.getLogger(__name__)
@@ -78,11 +80,20 @@ class RAGService:
         context_parts = []
         for doc in relevant_docs:
             md = doc.doc_metadata or {}
-            url = (
-                f"{config.BASE_BLOG_URL}/{doc.slug}"
-                if doc.slug.startswith(config.BLOG_PREFIX)
-                else "N/A"
-            )
+
+            # Generate URL based on document source
+            if doc.slug.startswith(config.BLOG_PREFIX):
+                url = f"{config.BASE_BLOG_URL}/{doc.slug}"
+            elif doc.slug.startswith(config.PORTFOLIO_PREFIX):
+                # For portfolio content, use the slug directly (it contains the actual path)
+                url = (
+                    f"{config.BASE_BLOG_URL}{doc.slug}"
+                    if doc.slug.startswith("/")
+                    else f"{config.BASE_BLOG_URL}/{doc.slug}"
+                )
+            else:
+                url = "N/A"
+
             tags = ", ".join(md.get("tags", [])) or "N/A"
             content_snippet = (
                 (doc.content[:500] + "...") if len(doc.content) > 500 else doc.content
@@ -106,13 +117,13 @@ class RAGService:
         system_prompt = (
             f"You are Ted Support, a helpful AI chatbot for Ted's developer portfolio.\n"
             f"The current year is {datetime.now().year}.\n"
-            "Use the following context from Ted's blog posts and personal knowledge base to answer the user's question:\n\n"
+            "Use the following context from Ted's portfolio content, blog posts and personal knowledge base to answer the user's question:\n\n"
             f"{context_text}\n\n"
             "Instructions:\n"
             "- Answer clearly and concisely, 2-3 sentences preferred.\n"
-            "- Include blog URLs from the 'URL' field whenever you reference a blog post.\n"
+            "- Include URLs from the 'URL' field whenever you reference portfolio pages or blog posts.\n"
             "- If the context doesn't contain the answer, politely indicate you don't know.\n"
-            "- Context can be unstructured PKB notes or blog posts with frontmatter.\n"
+            "- Context can be portfolio content, unstructured PKB notes or blog posts with frontmatter.\n"
             "- Do not hallucinate facts outside the context."
         )
 
@@ -135,3 +146,118 @@ class RAGService:
         except Exception as e:
             logger.error(f"Error streaming OpenAI response: {e}")
             yield f"\n[Error: Could not get response from the model]"
+
+    def _generate_content_hash(self, chunk: ContentChunk) -> str:
+        """Generate SHA-256 hash for content change detection."""
+        content_to_hash = f"{chunk.slug}{chunk.title}{chunk.content}{json.dumps(chunk.metadata or {}, sort_keys=True)}"
+        return hashlib.sha256(content_to_hash.encode()).hexdigest()
+
+    def update_portfolio_content(
+        self, content_chunks: List[ContentChunk]
+    ) -> Dict[str, Any]:
+        """
+        Update portfolio content with hash-based change detection.
+        Only updates documents that have changed and removes deleted ones.
+        """
+        stats = {"processed": 0, "updated": 0, "skipped": 0, "errors": []}
+
+        try:
+            # Get existing portfolio documents for comparison
+            existing_docs = (
+                self.db.query(Doc)
+                .filter(Doc.document_id.like(f"{config.PORTFOLIO_PREFIX}%"))
+                .all()
+            )
+
+            existing_docs_map = {doc.document_id: doc for doc in existing_docs}
+            processed_doc_ids = set()
+
+            # Process each content chunk
+            for chunk in content_chunks:
+                stats["processed"] += 1
+
+                try:
+                    # Generate content hash for change detection
+                    content_hash = self._generate_content_hash(chunk)
+
+                    # Create document ID with portfolio prefix (now using unique slugs)
+                    document_id = f"{config.PORTFOLIO_PREFIX}{chunk.slug}"
+                    processed_doc_ids.add(document_id)
+
+                    # Check if document exists and has same content hash
+                    existing_doc = existing_docs_map.get(document_id)
+                    if existing_doc:
+                        existing_hash = existing_doc.doc_metadata.get("content_hash")
+                        if existing_hash == content_hash:
+                            # Skip unchanged content
+                            stats["skipped"] += 1
+                            logger.debug(f"Skipping unchanged content: {document_id}")
+                            continue
+                        else:
+                            logger.debug(
+                                f"Content changed for {document_id}: {existing_hash} != {content_hash}"
+                            )
+                    else:
+                        logger.debug(f"New content: {document_id}")
+
+                    # Generate embedding for the content (only for new/changed content)
+                    embedding = embed_text(chunk.content)
+
+                    if existing_doc:
+                        # Update existing document
+                        existing_doc.title = chunk.title
+                        existing_doc.content = chunk.content
+                        existing_doc.doc_metadata = {
+                            "content_hash": content_hash,
+                            "source": "portfolio",
+                            "updated_at": datetime.now().isoformat(),
+                            **(chunk.metadata or {}),
+                        }
+                        existing_doc.embedding = embedding
+                    else:
+                        # Create new document
+                        doc = Doc(
+                            document_id=document_id,
+                            slug=chunk.slug,
+                            title=chunk.title,
+                            content=chunk.content,
+                            doc_metadata={
+                                "content_hash": content_hash,
+                                "source": "portfolio",
+                                "updated_at": datetime.now().isoformat(),
+                                **(chunk.metadata or {}),
+                            },
+                            embedding=embedding,
+                        )
+                        self.db.add(doc)
+
+                    stats["updated"] += 1
+
+                except Exception as e:
+                    error_msg = f"Failed to process chunk {chunk.slug}: {str(e)}"
+                    logger.error(error_msg)
+                    stats["errors"].append({"slug": chunk.slug, "error": str(e)})
+                    continue
+
+            # Remove documents that are no longer in the current content
+            doc_ids_to_remove = set(existing_docs_map.keys()) - processed_doc_ids
+            if doc_ids_to_remove:
+                deleted_count = (
+                    self.db.query(Doc)
+                    .filter(Doc.document_id.in_(doc_ids_to_remove))
+                    .delete(synchronize_session=False)
+                )
+                logger.info(f"Deleted {deleted_count} removed portfolio documents")
+
+            # Commit all changes
+            self.db.commit()
+            logger.info(f"Portfolio content update completed: {stats}")
+
+        except Exception as e:
+            self.db.rollback()
+            logger.error(f"Failed to update portfolio content: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to update portfolio content: {str(e)}"
+            )
+
+        return stats

@@ -38,6 +38,9 @@ class Config:
     # Knowledge Base
     KB_PREFIX = os.getenv("KNOWLEDGE_BASE_PREFIX", "kb/")
 
+    # Portfolio
+    PORTFOLIO_PREFIX = os.getenv("PORTFOLIO_PREFIX", "portfolio/")
+
     @property
     def couchdb_url(self) -> str:
         return f"http://{self.COUCHDB_USERNAME}:{self.COUCHDB_PASSWORD}@{self.COUCHDB_HOST}:{self.COUCHDB_PORT}"

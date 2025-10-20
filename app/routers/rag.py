@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.postgres.base import get_db
 from app.schemas.doc import DocResult
-from app.schemas.rag import PromptRequest
+from app.schemas.rag import PromptRequest, UpdateContentRequest, UpdateContentResponse
 from app.services.docs_ingester import ingest_all
 from app.services.rag_service import RAGService
 
@@ -97,3 +97,36 @@ def truncate(text: str | None, length: int) -> str | None:
     if not text:
         return None
     return text if len(text) <= length else text[:length] + "..."
+
+
+@router.post("/update", response_model=UpdateContentResponse)
+def update_portfolio_content(
+    request: UpdateContentRequest,
+    rag_service: RAGService = Depends(get_rag_service),
+):
+    """
+    Update portfolio content with complete replacement strategy.
+    Accepts portfolio content and manages embeddings for semantic search.
+    """
+    try:
+        logger.info(
+            f"Processing portfolio content update with {len(request.content)} chunks"
+        )
+
+        # Update portfolio content
+        stats = rag_service.update_portfolio_content(request.content)
+
+        return UpdateContentResponse(
+            processed=stats["processed"],
+            updated=stats["updated"],
+            skipped=stats["skipped"],
+            errors=stats["errors"],
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in /update endpoint: {e}")
+        raise HTTPException(
+            status_code=500, detail="Failed to process portfolio content update"
+        )

@@ -1,5 +1,6 @@
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel
-from typing import List
 
 
 class ChatMessage(BaseModel):
@@ -17,3 +18,22 @@ class PromptRequest(BaseModel):
     #     { "role": "user", "content": "Nice." }
     #   ]
     # }
+
+
+class ContentChunk(BaseModel):
+    slug: str
+    title: str
+    content: str
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class UpdateContentRequest(BaseModel):
+    timestamp: str
+    content: List[ContentChunk]
+
+
+class UpdateContentResponse(BaseModel):
+    processed: int
+    updated: int
+    skipped: int
+    errors: List[Dict[str, str]]
