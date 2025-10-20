@@ -23,7 +23,10 @@ def get_rag_service(db: Session = Depends(get_db)) -> RAGService:
 
 @router.post("/prompt")
 async def prompt_rag(
-    request: PromptRequest, rag_service: RAGService = Depends(get_rag_service)
+    request: PromptRequest,
+    limit: int = Query(15, ge=1, le=50, description="Number of documents to retrieve"),
+    threshold: float = Query(0.25, ge=0.0, le=1.0, description="Similarity threshold"),
+    rag_service: RAGService = Depends(get_rag_service)
 ):
     """
     Prompt endpoint for RAG chatbot.
@@ -34,7 +37,11 @@ async def prompt_rag(
 
     try:
         logger.debug(f"Received prompt request with {len(request.messages)} messages.")
-        streamer = rag_service.stream_chat_response(request.messages)
+        streamer = rag_service.stream_chat_response(
+            messages=request.messages,
+            limit=limit,
+            threshold=threshold
+        )
         return StreamingResponse(streamer, media_type="text/plain")
 
     except Exception as e:
@@ -59,8 +66,8 @@ def reingest(db: Session = Depends(get_db)):
 @router.get("/query", response_model=List[DocResult])
 def query_docs(
     q: str = Query(..., min_length=1),
-    limit: int = Query(5, ge=1, le=50),
-    threshold: float = Query(0.2, ge=0.0, le=1.0),
+    limit: int = Query(10, ge=1, le=50),
+    threshold: float = Query(0.25, ge=0.0, le=1.0),
     debug: bool = Query(False),
     rag_service: RAGService = Depends(get_rag_service),
 ):

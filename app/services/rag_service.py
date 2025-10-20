@@ -26,7 +26,7 @@ class RAGService:
         self.db = db
 
     def get_relevant_documents(
-        self, query: str, limit: int = 10, threshold: float = 0.1
+        self, query: str, limit: int, threshold: float
     ) -> List[DocResult]:
         """
         Embeds a query and performs semantic search with cosine similarity.
@@ -71,14 +71,18 @@ class RAGService:
             # Re-raise as a standard exception for the router to handle
             raise Exception("Internal error during search") from e
 
-    async def stream_chat_response(self, messages: List[ChatMessage]):
+    async def stream_chat_response(self, messages: List[ChatMessage], limit: int, threshold: float):
         """Streams a chat response, using the retrieval logic to build context."""
 
         # The last message is always the user's question
         latest_user_question = messages[-1].content
 
-        # 1. Retrieve relevant docs
-        relevant_docs = self.get_relevant_documents(query=latest_user_question)
+        # 1. Retrieve relevant docs using provided parameters
+        relevant_docs = self.get_relevant_documents(
+            query=latest_user_question,
+            limit=limit,
+            threshold=threshold
+        )
 
         # 2. Build enriched context
         context_parts = []
@@ -123,12 +127,16 @@ class RAGService:
             f"The current year is {datetime.now().year}.\n"
             "Use the following context from Ted's portfolio content, blog posts and personal knowledge base to answer the user's question:\n\n"
             f"{context_text}\n\n"
-            "Instructions:\n"
-            "- Answer clearly and concisely, 2-3 sentences preferred.\n"
-            "- Include URLs from the 'URL' field whenever you reference portfolio pages or blog posts.\n"
-            "- If the context doesn't contain the answer, politely indicate you don't know.\n"
-            "- Context can be portfolio content, unstructured PKB notes or blog posts with frontmatter.\n"
-            "- Do not hallucinate facts outside the context."
+            "CRITICAL INSTRUCTIONS:\n"
+            "- Provide specific, actionable answers that directly address the user's question.\n"
+            "- Keep responses concise but informative - aim for 2-4 sentences maximum.\n"
+            "- ALWAYS include the exact URL from the 'URL' field when referencing any portfolio page or blog post.\n"
+            "- Highlight relevant technologies, frameworks, and tools mentioned in the context.\n"
+            "- If the context contains project details, mention specific features, accomplishments, or technical implementations.\n"
+            "- STRICTLY DO NOT HALLUCINATE: Only use information explicitly present in the provided context.\n"
+            "- If the context doesn't contain sufficient information to answer the question, clearly state: 'I don't have enough information about that in my knowledge base.'\n"
+            "- Never invent URLs, technologies, or project details that aren't in the context.\n"
+            "- Focus on providing accurate, verifiable information from the available documents."
         )
 
         # 4. Build messages with existing chat history
