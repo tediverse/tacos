@@ -71,14 +71,55 @@ class RAGService:
             # Re-raise as a standard exception for the router to handle
             raise Exception("Internal error during search") from e
 
+    def get_relevant_documents_with_navigation(
+        self, query: str, limit: int, threshold: float
+    ) -> List[DocResult]:
+        """
+        Enhanced version that always includes navigation content at the top.
+        Ensures navigation is available for any chatbot questions.
+        """
+        try:
+            # Get regular results (reserve 1 spot for navigation)
+            regular_results = self.get_relevant_documents(query, limit-1, threshold)
+            
+            # Force include navigation content with high priority
+            navigation_docs = (
+                self.db.query(Doc)
+                .filter(Doc.doc_metadata.op("->>")("contentType") == "navigation")
+                .all()
+            )
+            
+            # Convert navigation docs to DocResult with high similarity
+            navigation_results = [
+                DocResult(
+                    id=doc.id,
+                    slug=doc.slug,
+                    title=doc.title,
+                    content=doc.content,
+                    doc_metadata=doc.doc_metadata,
+                    similarity=0.95,  # High fixed similarity to ensure top ranking
+                )
+                for doc in navigation_docs
+            ]
+            
+            # Combine and ensure navigation is at top
+            combined = navigation_results + regular_results
+            combined.sort(key=lambda x: x.similarity, reverse=True)
+            return combined[:limit]
+
+        except Exception as e:
+            logger.error(f"Error during navigation-enhanced search: {e}")
+            # Fall back to regular search if navigation enhancement fails
+            return self.get_relevant_documents(query, limit, threshold)
+
     async def stream_chat_response(self, messages: List[ChatMessage], limit: int, threshold: float):
         """Streams a chat response, using the retrieval logic to build context."""
 
         # The last message is always the user's question
         latest_user_question = messages[-1].content
 
-        # 1. Retrieve relevant docs using provided parameters
-        relevant_docs = self.get_relevant_documents(
+        # 1. Retrieve relevant docs using navigation-enhanced search
+        relevant_docs = self.get_relevant_documents_with_navigation(
             query=latest_user_question,
             limit=limit,
             threshold=threshold
@@ -92,13 +133,16 @@ class RAGService:
             # Generate URL based on document source
             if doc.slug.startswith(config.BLOG_PREFIX):
                 url = f"{config.BASE_BLOG_URL}/{doc.slug}"
-            elif doc.slug.startswith(config.PORTFOLIO_PREFIX):
-                # For portfolio content, use the slug directly (it contains the actual path)
-                url = (
-                    f"{config.BASE_BLOG_URL}{doc.slug}"
-                    if doc.slug.startswith("/")
-                    else f"{config.BASE_BLOG_URL}/{doc.slug}"
-                )
+
+            # Navigation content describes all routes, so use the base URL
+            elif doc.slug == "navigation:routes":
+                url = f"{config.BASE_BLOG_URL}"
+            # Project
+            elif doc.slug.startswith("projects"):
+                url = f"{config.BASE_BLOG_URL}/projects"
+            # Homepage
+            elif doc.slug.startswith("/"):
+                url = f"{config.BASE_BLOG_URL}/"
             else:
                 url = "N/A"
 
@@ -127,16 +171,13 @@ class RAGService:
             f"The current year is {datetime.now().year}.\n"
             "Use the following context from Ted's portfolio content, blog posts and personal knowledge base to answer the user's question:\n\n"
             f"{context_text}\n\n"
-            "CRITICAL INSTRUCTIONS:\n"
-            "- Provide specific, actionable answers that directly address the user's question.\n"
-            "- Keep responses concise but informative - aim for 2-4 sentences maximum.\n"
-            "- ALWAYS include the exact URL from the 'URL' field when referencing any portfolio page or blog post.\n"
-            "- Highlight relevant technologies, frameworks, and tools mentioned in the context.\n"
-            "- If the context contains project details, mention specific features, accomplishments, or technical implementations.\n"
-            "- STRICTLY DO NOT HALLUCINATE: Only use information explicitly present in the provided context.\n"
-            "- If the context doesn't contain sufficient information to answer the question, clearly state: 'I don't have enough information about that in my knowledge base.'\n"
-            "- Never invent URLs, technologies, or project details that aren't in the context.\n"
-            "- Focus on providing accurate, verifiable information from the available documents."
+            "CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:\n"
+            "- Answer the user's question directly and specifically using ONLY information from the provided context.\n"
+            "- Keep responses concise (2-4 sentences) and actionable.\n"
+            "- ALWAYS include the exact URL from the 'URL' field when referencing any page - NEVER use relative paths.\n"
+            "- When discussing projects, highlight relevant technologies and specific accomplishments mentioned in the context.\n"
+            "- STRICTLY NO HALLUCINATION: If information isn't in the context, say 'I don't have enough information about that in my knowledge base.'\n"
+            "- Navigation content is always available - use it to guide users to relevant site sections and provide clear URLs in markdown format."
         )
 
         # 4. Build messages with existing chat history
