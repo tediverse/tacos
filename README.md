@@ -14,14 +14,15 @@ A self-hosted backend that powers [tedawf.com](https://github.com/tedawf/tedawf.
 
 ```mermaid
 graph TB
-    A[Obsidian Notes] -->|LiveSync| B[CouchDB]
-    B -->|Real-time Changes| C[FastAPI Backend]
-    C -->|Store Embeddings| D[Postgres + pgvector]
-    E[Portfolio Site] -->|Fetch Blog Posts| C
-    F[Visitor] -->|Ask Questions| E
-    E -->|Send to Chat API| C
-    C -->|RAG Response| E
-    E -->|Display Answer| F
+    A[Obsidian] -->|LiveSync| B[CouchDB]
+    B -->|_changes| C[FastAPI]
+    C -->|Embeddings| D[Postgres+pgvector]
+
+    E[Users] -->|Chat| F[Portfolio Site]
+    F -->|/prompt| C
+    C -->|RAG| D
+    C -->|Stream response| F
+    F -->|Answer| E
 ```
 
 ### In Other Words
