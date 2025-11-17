@@ -2,7 +2,7 @@ import datetime
 import logging
 import math
 import os
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import frontmatter
 
@@ -25,7 +25,7 @@ def parse_post_data(
             return None
 
         parsed = frontmatter.loads(markdown)
-        metadata = parsed.metadata
+        metadata = parsed.metadata or {}
 
         # Calculate reading time
         reading_time = calculate_reading_time(parsed.content)
@@ -46,6 +46,10 @@ def parse_post_data(
         slug = normalize_slug(slug)
         title = derive_title(metadata, slug)
 
+        co_authors = normalize_coauthors(
+            (metadata or {}).get("coAuthors") or (metadata or {}).get("coauthors")
+        )
+
         post_data = {
             "id": doc["_id"],
             "slug": slug,
@@ -57,6 +61,7 @@ def parse_post_data(
             "tags": metadata.get("tags", []),
             "readingTime": reading_time,
             "draft": metadata.get("draft", False),
+            "coAuthors": co_authors,
         }
 
         if include_content:
@@ -91,6 +96,19 @@ def derive_title(metadata: dict, slug: str) -> str:
     clean_slug = slug.split("/", 1)[-1]  # Remove prefix (blog/ or kb/)
     clean_slug = clean_slug.replace("-", " ").replace("_", " ")
     return clean_slug.title()
+
+
+def normalize_coauthors(value) -> List[str]:
+    """
+    Normalize co-author metadata into a list of strings for consistent API responses.
+    """
+    if not value:
+        return []
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, (list, tuple, set)):
+        return [str(item) for item in value if item]
+    return [str(value)]
 
 
 def convert_date_to_string(value):
