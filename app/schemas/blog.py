@@ -15,6 +15,7 @@ class PostSummary(BaseModel):
     readingTime: Optional[str] = None
     draft: bool = False
     coAuthors: List[str] = Field(default_factory=list)
+    views: int = 0
 
 
 class PostDetail(PostSummary):

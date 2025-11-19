@@ -14,7 +14,8 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
-from app.models import doc, couchdb_changes
+from app.models import couchdb_changes, doc, post_view
+
 target_metadata = Base.metadata
 
 # other values from the config, defined by the needs of env.py,
