@@ -18,3 +18,24 @@ class FakeCouchDB:
         if doc_id not in self.docs:
             raise pycouchdb.exceptions.NotFound(doc_id)
         return self.docs[doc_id]
+
+
+class FakeRepo:
+    """
+    Minimal repo stand-in used in service tests.
+    """
+
+    def __init__(self, docs):
+        self.docs = docs
+
+    def list_blog_docs(self):
+        return list(self.docs)
+
+    def get_blog_doc(self, _slug):
+        if not self.docs:
+            return None
+        doc_id = f"blog/{_slug}.md"
+        for doc in self.docs:
+            if doc.get("_id") == doc_id or doc.get("path") == doc_id:
+                return doc
+        raise AssertionError(f"Unexpected slug requested: {_slug}")

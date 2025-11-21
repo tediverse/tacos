@@ -2,7 +2,7 @@ import datetime
 import logging
 import math
 import os
-from typing import Iterable, List, Optional
+from typing import List, Optional
 
 import frontmatter
 
@@ -13,10 +13,20 @@ logger = logging.getLogger(__name__)
 
 
 class PostsService:
-    def __init__(self, repo, parser, view_service):
+    def __init__(
+        self,
+        repo,
+        parser,
+        view_service,
+        *,
+        process_image_refs=None,
+        base_image_url: str | None = None,
+    ):
         self.repo = repo
         self.parser = parser
         self.view_service = view_service
+        self.process_image_refs = process_image_refs or _process_image_refs
+        self.base_image_url = base_image_url or config.BLOG_API_URL
 
     def list_posts(self) -> List[PostSummary]:
         docs = self.repo.list_blog_docs()
@@ -24,7 +34,12 @@ class PostsService:
         for doc in docs:
             slug = doc.get("path", "").removeprefix("blog/").removesuffix(".md")
             post_data = parse_post_data(
-                doc, slug, include_content=False, parser=self.parser
+                doc,
+                slug,
+                include_content=False,
+                parser=self.parser,
+                process_image_refs=self.process_image_refs,
+                base_image_url=self.base_image_url,
             )
             if post_data:
                 posts.append(post_data)
@@ -41,7 +56,14 @@ class PostsService:
         doc = self.repo.get_blog_doc(slug)
         if not doc:
             return None
-        post_data = parse_post_data(doc, slug, include_content=True, parser=self.parser)
+        post_data = parse_post_data(
+            doc,
+            slug,
+            include_content=True,
+            parser=self.parser,
+            process_image_refs=self.process_image_refs,
+            base_image_url=self.base_image_url,
+        )
         if not post_data:
             return None
         views = self.view_service.get_view_count(slug)
@@ -49,7 +71,13 @@ class PostsService:
 
 
 def parse_post_data(
-    doc: dict, slug: str, include_content: bool = False, *, parser
+    doc: dict,
+    slug: str,
+    include_content: bool = False,
+    *,
+    parser,
+    process_image_refs=None,
+    base_image_url: str | None = None,
 ) -> Optional[dict]:
     """Parse frontmatter and return standardized post data"""
     try:
@@ -63,9 +91,14 @@ def parse_post_data(
 
         reading_time = calculate_reading_time(parsed.content)
 
+        if process_image_refs is None:
+            process_image_refs = _process_image_refs
+
+        image_base = base_image_url or config.BLOG_API_URL
+
         image_field = metadata.get("image")
         processed_image = (
-            _process_frontmatter_image(image_field, f"{config.BLOG_API_URL}/images")
+            _process_frontmatter_image(image_field, f"{image_base}/images")
             if image_field
             else None
         )
@@ -91,8 +124,8 @@ def parse_post_data(
         }
 
         if include_content:
-            post_data["content"] = _process_image_refs(
-                parsed.content, f"{config.BLOG_API_URL}/images"
+            post_data["content"] = process_image_refs(
+                parsed.content, f"{image_base}/images"
             )
 
         return post_data

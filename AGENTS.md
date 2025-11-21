@@ -26,7 +26,9 @@ Secrets stay in `.env`, loaded through `python-dotenv`; never hard-code `TACOS_A
 
 ## Testing
 
+- Activate the virtualenv before tests: `. .venv/bin/activate && pytest -q` (or keep the shell activated for repeated runs).
 - Run tests with `pytest -q`; add `--cov` for coverage when needed.
+- Avoid monkeypatching; prefer dependency injection. Refactor services to accept collaborators/config (e.g., base URLs, processors) as parameters so tests can pass fakes directly.
 - Keep tests close to the code they cover (e.g., `tests/services`, `tests/routers`).
 - Favor small, single-behavior tests; add shared fixtures in `tests/conftest.py` if needed.
 - Routers follow a simple, Pythonic flow: router → service → repo. Inject services via FastAPI `Depends`; override the service in tests for easy isolation.
