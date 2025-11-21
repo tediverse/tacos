@@ -1,22 +1,10 @@
 import base64
 from unittest.mock import patch
 
-import pycouchdb
 import pytest
 
 from app.services.content_parser import ContentParser
-
-
-class MockDB:
-    """Minimal CouchDB stand-in returning preloaded docs by id."""
-
-    def __init__(self, docs: dict[str, dict]):
-        self.docs = docs
-
-    def get(self, doc_id: str) -> dict:
-        if doc_id not in self.docs:
-            raise pycouchdb.exceptions.NotFound(doc_id)
-        return self.docs[doc_id]
+from tests.conftest import FakeCouchDB
 
 
 def test_get_markdown_content_concatenates_blog_chunks():
@@ -31,7 +19,7 @@ def test_get_markdown_content_concatenates_blog_chunks():
         "chunk-3": {"type": "leaf", "data": "they blend search with LLMs."},
     }
 
-    parser = ContentParser(MockDB(docs))
+    parser = ContentParser(FakeCouchDB(docs))
 
     result = parser.get_markdown_content(parent)
 
@@ -52,7 +40,7 @@ def test_get_binary_content_decodes_base64_chunks():
         "img-2": {"type": "leaf", "data": base64.b64encode(b"\x0d\x0aEND").decode()},
     }
 
-    parser = ContentParser(MockDB(docs))
+    parser = ContentParser(FakeCouchDB(docs))
 
     result = parser.get_binary_content(parent)
 
@@ -70,7 +58,7 @@ def test_get_markdown_content_skips_missing_children():
         "chunk-2": {"type": "leaf", "data": "omega"},
     }
 
-    parser = ContentParser(MockDB(docs))
+    parser = ContentParser(FakeCouchDB(docs))
 
     result = parser.get_markdown_content(parent)
 
@@ -80,7 +68,7 @@ def test_get_markdown_content_skips_missing_children():
 def test_get_markdown_content_returns_empty_when_no_children():
     parent = {"_id": "blog:empty", "type": "plain", "children": []}
 
-    parser = ContentParser(MockDB({}))
+    parser = ContentParser(FakeCouchDB({}))
 
     result = parser.get_markdown_content(parent)
 
@@ -93,7 +81,7 @@ def test_get_binary_content_skips_bad_base64_chunk():
         "good": {"type": "leaf", "data": base64.b64encode(b"OK").decode()},
         "bad": {"type": "leaf", "data": "!!not-base64!!"},
     }
-    parser = ContentParser(MockDB(docs))
+    parser = ContentParser(FakeCouchDB(docs))
 
     result = parser.get_binary_content(parent)
 
@@ -101,7 +89,7 @@ def test_get_binary_content_skips_bad_base64_chunk():
 
 
 def test_get_markdown_content_skips_erroring_child():
-    class ErrorDB(MockDB):
+    class ErrorDB(FakeCouchDB):
         def get(self, doc_id: str) -> dict:
             if doc_id == "boom":
                 raise RuntimeError("transient error")
@@ -123,7 +111,7 @@ def test_get_markdown_content_skips_erroring_child():
 def test_get_markdown_content_decodes_bytes_leaf():
     parent = {"_id": "blog:bytes", "type": "plain", "children": ["b1"]}
     docs = {"b1": {"type": "leaf", "data": b"hello \xffworld"}}
-    parser = ContentParser(MockDB(docs))
+    parser = ContentParser(FakeCouchDB(docs))
 
     result = parser.get_markdown_content(parent)
 
@@ -131,7 +119,7 @@ def test_get_markdown_content_decodes_bytes_leaf():
 
 
 def test_get_markdown_content_decodes_bytes_from_raw():
-    parser = ContentParser(MockDB({}))
+    parser = ContentParser(FakeCouchDB({}))
     with patch.object(parser, "_get_raw_content", return_value=b"hi \xffthere"):
         result = parser.get_markdown_content({})
     assert result == "hi there"
@@ -143,5 +131,5 @@ def test_get_markdown_ignores_non_leaf_child():
         "meta": {"type": "meta", "info": "skip me"},
         "leaf": {"type": "leaf", "data": "kept"},
     }
-    parser = ContentParser(MockDB(docs))
+    parser = ContentParser(FakeCouchDB(docs))
     assert parser.get_markdown_content(parent) == "kept"

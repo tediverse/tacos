@@ -5,12 +5,12 @@ from typing import Optional, Tuple
 
 import pycouchdb
 
-from app.db.couchdb import db, parser
-
 logger = logging.getLogger(__name__)
 
 
-def get_image_from_couchdb(image_path: str) -> Tuple[Optional[bytes], Optional[str]]:
+def get_image_from_couchdb(
+    image_path: str, *, db, parser
+) -> Tuple[Optional[bytes], Optional[str]]:
     """
     Retrieve an image from CouchDB using the ContentParser
     """
