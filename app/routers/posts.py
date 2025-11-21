@@ -6,12 +6,12 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app import dependencies as deps
 from app.config import config
 from app.db.couchdb import get_couch
 from app.db.postgres.base import get_db
 from app.schemas.blog import PostDetail, PostSummary
-from app.services.post_service import parse_post_data
-from app.services.post_view_service import PostViewService
+from app.services.posts_service import PostsService
 
 logger = logging.getLogger(__name__)
 
@@ -20,57 +20,12 @@ VIEW_GUARD_TTL_SECONDS = 30
 _recent_view_hits: Dict[str, float] = {}
 
 
-def _filter_blog_docs(docs):
-    """Helper function to filter and return only blog documents."""
-    blog_docs = []
-
-    for doc in docs:
-        # Skip deleted docs
-        if doc.get("deleted", False):
-            continue
-
-        if doc.get("type") == "plain" and doc.get("path", "").startswith(
-            config.BLOG_PREFIX
-        ):
-            blog_docs.append(doc)
-
-    return blog_docs
-
-
 @router.get("/posts", response_model=List[PostSummary])
-def list_posts(db_session: Session = Depends(get_db), couch=Depends(get_couch)):
+def list_posts(service: PostsService = Depends(deps.get_posts_service)):
     """Get all posts metadata."""
     try:
-        couch_db, parser = couch
-        all_docs = [row.get("doc", row) for row in couch_db.all(include_docs=True)]
-        blog_docs = _filter_blog_docs(all_docs)
-        posts: List[dict] = []
-
-        for doc in blog_docs:
-            slug = (
-                doc.get("path", "").removeprefix(config.BLOG_PREFIX).removesuffix(".md")
-            )
-
-            post_data = parse_post_data(doc, slug, include_content=False, parser=parser)
-            if post_data:
-                posts.append(post_data)
-
-        # Sort by publishedAt desc
-        posts.sort(key=lambda x: x.get("publishedAt") or "0000-01-01", reverse=True)
-
-        view_service = PostViewService(db_session)
-        view_counts = view_service.get_views_for_slugs(
-            post.get("slug") for post in posts
-        )
-        enriched_posts = []
-        for post in posts:
-            post["views"] = view_counts.get(post["slug"], 0)
-            enriched_posts.append(PostSummary(**post))
-
-        return enriched_posts
-
+        return service.list_posts()
     except HTTPException:
-        # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
         logger.error(f"Unexpected error listing posts: {e}")
@@ -79,23 +34,15 @@ def list_posts(db_session: Session = Depends(get_db), couch=Depends(get_couch)):
 
 @router.get("/posts/{slug}", response_model=PostDetail)
 def get_post(
-    slug: str, db_session: Session = Depends(get_db), couch=Depends(get_couch)
+    slug: str,
+    service: PostsService = Depends(deps.get_posts_service),
 ):
     """Get a single post by slug."""
     try:
-        couch_db, parser = couch
-        blog_doc = _get_blog_doc_by_slug(slug, couch_db)
-        if not blog_doc:
+        post = service.get_post(slug)
+        if not post:
             raise HTTPException(status_code=404, detail="Post not found")
-
-        post_data = parse_post_data(blog_doc, slug, include_content=True, parser=parser)
-        if not post_data:
-            raise HTTPException(status_code=500, detail="Failed to parse post")
-
-        view_service = PostViewService(db_session)
-        post_data["views"] = view_service.get_view_count(slug)
-        return PostDetail(**post_data)
-
+        return post
     except HTTPException:
         raise
     except Exception as e:
@@ -107,7 +54,7 @@ def get_post(
 def increment_post_views(
     slug: str,
     request: Request,
-    db_session: Session = Depends(get_db),
+    db: Session = Depends(get_db),
     couch=Depends(get_couch),
 ):
     couch_db, _parser = couch
@@ -116,7 +63,7 @@ def increment_post_views(
         raise HTTPException(status_code=404, detail="Post not found")
 
     client_ip = request.client.host if request.client else ""
-    view_service = PostViewService(db_session)
+    view_service = deps.get_post_view_service(db)
 
     if client_ip and _should_skip_increment(client_ip, slug):
         views = view_service.get_view_count(slug)

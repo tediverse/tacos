@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.config import config
 from app.models.doc import Doc
 from app.services.content_enhancer import content_enhancer
-from app.services.post_service import parse_post_data
+from app.services.posts_service import parse_post_data
 from app.services.text_embedder import embed_text
 
 logger = logging.getLogger(__name__)
