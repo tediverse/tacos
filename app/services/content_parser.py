@@ -44,7 +44,14 @@ class ContentParser:
                                 f"Failed to decode base64 chunk {c}, skipping"
                             )
                     else:
-                        parts.append(child_doc["data"])
+                        data = child_doc["data"]
+                        if isinstance(data, bytes):
+                            logger.warning(
+                                "Received bytes in text leaf %s; decoding utf-8/ignore",
+                                c,
+                            )
+                            data = data.decode("utf-8", errors="ignore")
+                        parts.append(data)
             except pycouchdb.exceptions.NotFound:
                 continue
             except Exception as e:

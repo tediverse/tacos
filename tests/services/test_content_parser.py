@@ -1,6 +1,8 @@
-import pytest
-import pycouchdb
 import base64
+from unittest.mock import patch
+
+import pycouchdb
+import pytest
 
 from app.services.content_parser import ContentParser
 
@@ -73,3 +75,73 @@ def test_get_markdown_content_skips_missing_children():
     result = parser.get_markdown_content(parent)
 
     assert result == "alpha omega"
+
+
+def test_get_markdown_content_returns_empty_when_no_children():
+    parent = {"_id": "blog:empty", "type": "plain", "children": []}
+
+    parser = ContentParser(MockDB({}))
+
+    result = parser.get_markdown_content(parent)
+
+    assert result == ""
+
+
+def test_get_binary_content_skips_bad_base64_chunk():
+    parent = {"_id": "kb:img/partial", "type": "plain", "children": ["good", "bad"]}
+    docs = {
+        "good": {"type": "leaf", "data": base64.b64encode(b"OK").decode()},
+        "bad": {"type": "leaf", "data": "!!not-base64!!"},
+    }
+    parser = ContentParser(MockDB(docs))
+
+    result = parser.get_binary_content(parent)
+
+    assert result == b"OK"
+
+
+def test_get_markdown_content_skips_erroring_child():
+    class ErrorDB(MockDB):
+        def get(self, doc_id: str) -> dict:
+            if doc_id == "boom":
+                raise RuntimeError("transient error")
+            return super().get(doc_id)
+
+    parent = {"_id": "blog:errors", "type": "plain", "children": ["ok", "boom", "ok2"]}
+    docs = {
+        "ok": {"type": "leaf", "data": "first "},
+        "ok2": {"type": "leaf", "data": "last"},
+    }
+
+    parser = ContentParser(ErrorDB(docs))
+
+    result = parser.get_markdown_content(parent)
+
+    assert result == "first last"
+
+
+def test_get_markdown_content_decodes_bytes_leaf():
+    parent = {"_id": "blog:bytes", "type": "plain", "children": ["b1"]}
+    docs = {"b1": {"type": "leaf", "data": b"hello \xffworld"}}
+    parser = ContentParser(MockDB(docs))
+
+    result = parser.get_markdown_content(parent)
+
+    assert result == "hello world"  # \xff is dropped
+
+
+def test_get_markdown_content_decodes_bytes_from_raw():
+    parser = ContentParser(MockDB({}))
+    with patch.object(parser, "_get_raw_content", return_value=b"hi \xffthere"):
+        result = parser.get_markdown_content({})
+    assert result == "hi there"
+
+
+def test_get_markdown_ignores_non_leaf_child():
+    parent = {"_id": "blog:meta", "type": "plain", "children": ["meta", "leaf"]}
+    docs = {
+        "meta": {"type": "meta", "info": "skip me"},
+        "leaf": {"type": "leaf", "data": "kept"},
+    }
+    parser = ContentParser(MockDB(docs))
+    assert parser.get_markdown_content(parent) == "kept"
