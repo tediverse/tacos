@@ -7,14 +7,13 @@ from typing import Dict, List, Optional
 import frontmatter
 
 from app.config import config
-from app.db.couchdb import parser
 from app.services.image_service import process_image_references
 
 logger = logging.getLogger(__name__)
 
 
 def parse_post_data(
-    doc: dict, slug: str, include_content: bool = False
+    doc: dict, slug: str, include_content: bool = False, *, parser
 ) -> Optional[Dict]:
     """Parse frontmatter and return standardized post data"""
     try:

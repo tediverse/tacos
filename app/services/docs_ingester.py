@@ -4,7 +4,6 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.config import config
-from app.db.couchdb import parser
 from app.models.doc import Doc
 from app.services.content_enhancer import content_enhancer
 from app.services.post_service import parse_post_data
@@ -13,12 +12,19 @@ from app.services.text_embedder import embed_text
 logger = logging.getLogger(__name__)
 
 
-def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
+def ingest_doc(
+    db: Session,
+    raw_doc: dict,
+    *,
+    parser,
+    enhance_content=content_enhancer.enhance_content,
+    embed_text_fn=embed_text,
+) -> Optional[str]:
     """Ingest a single CouchDB doc into Postgres with chunking + embedding."""
 
     # Parse via post_service (includes frontmatter handling)
     slug = raw_doc.get("path") or raw_doc["_id"]
-    post_data = parse_post_data(raw_doc, slug, include_content=True)
+    post_data = parse_post_data(raw_doc, slug, include_content=True, parser=parser)
     if not post_data or not post_data.get("content"):
         logger.warning(f"Skipped doc {slug} (no content after parsing)")
         return None
@@ -35,7 +41,7 @@ def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
     for chunk in chunks:
         try:
             # Enhance content with metadata before embedding
-            enhanced_content = content_enhancer.enhance_content(
+            enhanced_content = enhance_content(
                 content=chunk,
                 title=title,
                 metadata={
@@ -43,7 +49,7 @@ def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
                     "summary": post_data.get("summary"),
                 },
             )
-            embedding = embed_text(enhanced_content)
+            embedding = embed_text_fn(enhanced_content)
             new_docs.append(
                 Doc(
                     document_id=raw_doc["_id"],
@@ -81,7 +87,7 @@ def ingest_doc(db: Session, raw_doc: dict) -> Optional[str]:
         return None
 
 
-def ingest_all(db: Session):
+def ingest_all(db: Session, *, parser):
     """One-time ingestion of all CouchDB docs. Also removes deleted docs."""
     all_docs = [row.get("doc", row) for row in parser.db.all(include_docs=True)]
     for doc in all_docs:
@@ -102,7 +108,7 @@ def ingest_all(db: Session):
         ):
             continue
 
-        ingest_doc(db, doc)
+        ingest_doc(db, doc, parser=parser)
 
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):

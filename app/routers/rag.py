@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
+from app.db.couchdb import get_couch
 from app.db.postgres.base import get_db
 from app.schemas.doc import DocResult
 from app.schemas.rag import PromptRequest, UpdateContentRequest, UpdateContentResponse
@@ -26,7 +27,7 @@ async def prompt_rag(
     request: PromptRequest,
     limit: int = Query(15, ge=1, le=50, description="Number of documents to retrieve"),
     threshold: float = Query(0.25, ge=0.0, le=1.0, description="Similarity threshold"),
-    rag_service: RAGService = Depends(get_rag_service)
+    rag_service: RAGService = Depends(get_rag_service),
 ):
     """
     Prompt endpoint for RAG chatbot.
@@ -38,9 +39,7 @@ async def prompt_rag(
     try:
         logger.debug(f"Received prompt request with {len(request.messages)} messages.")
         streamer = rag_service.stream_chat_response(
-            messages=request.messages,
-            limit=limit,
-            threshold=threshold
+            messages=request.messages, limit=limit, threshold=threshold
         )
         return StreamingResponse(streamer, media_type="text/plain")
 
@@ -56,7 +55,8 @@ def reingest(db: Session = Depends(get_db)):
     Deletes old docs and re-ingests all CouchDB content.
     """
     try:
-        ingest_all(db)
+        couch_db, parser = get_couch()
+        ingest_all(db, parser=parser)
         return {"status": "success", "message": "ingestion completed."}
     except Exception as e:
         logger.error(f"Reset ingest failed: {e}", exc_info=True)

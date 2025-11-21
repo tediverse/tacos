@@ -6,6 +6,7 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.config import config
+from app.db.couchdb import get_couch
 from app.db.postgres.base import SessionLocal
 from app.db.postgres.last_seq_queries import get_last_seq, update_last_seq
 from app.models.doc import Doc
@@ -22,6 +23,7 @@ def listen_changes():
 
     while not STOP_LISTENER_EVENT.is_set():
         try:
+            couch_db, couch_parser = get_couch()
             with SessionLocal() as db_session:
                 last_seq = get_last_seq(db_session)
                 url = (
@@ -54,7 +56,7 @@ def listen_changes():
                             change = json.loads(line)
                             last_seq = change.get("seq", last_seq)
                             update_last_seq(db_session, last_seq)
-                            process_change(change, db_session)
+                            process_change(change, db_session, couch_parser)
                         except json.JSONDecodeError:
                             logger.warning(f"Skipping invalid JSON line: {line}")
                         except Exception as e:
@@ -72,7 +74,7 @@ def listen_changes():
             backoff = min(backoff * 2, 60)  # cap backoff at 60s
 
 
-def process_change(change: dict, db_session: Session):
+def process_change(change: dict, db_session: Session, parser):
     """Process a single CouchDB change entry"""
     doc = change.get("doc")
     if not doc:
@@ -97,7 +99,7 @@ def process_change(change: dict, db_session: Session):
         return
 
     try:
-        ingest_doc(db_session, doc)
+        ingest_doc(db_session, doc, parser=parser)
     except Exception as e:
         logger.error(f"Failed to ingest doc {doc['_id']}: {e}")
 

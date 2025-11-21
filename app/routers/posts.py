@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.config import config
-from app.db.couchdb import db
+from app.db.couchdb import get_couch
 from app.db.postgres.base import get_db
 from app.schemas.blog import PostDetail, PostSummary
 from app.services.post_service import parse_post_data
@@ -38,10 +38,11 @@ def _filter_blog_docs(docs):
 
 
 @router.get("/posts", response_model=List[PostSummary])
-def list_posts(db_session: Session = Depends(get_db)):
+def list_posts(db_session: Session = Depends(get_db), couch=Depends(get_couch)):
     """Get all posts metadata."""
     try:
-        all_docs = [row.get("doc", row) for row in db.all(include_docs=True)]
+        couch_db, parser = couch
+        all_docs = [row.get("doc", row) for row in couch_db.all(include_docs=True)]
         blog_docs = _filter_blog_docs(all_docs)
         posts: List[dict] = []
 
@@ -50,7 +51,7 @@ def list_posts(db_session: Session = Depends(get_db)):
                 doc.get("path", "").removeprefix(config.BLOG_PREFIX).removesuffix(".md")
             )
 
-            post_data = parse_post_data(doc, slug, include_content=False)
+            post_data = parse_post_data(doc, slug, include_content=False, parser=parser)
             if post_data:
                 posts.append(post_data)
 
@@ -77,14 +78,17 @@ def list_posts(db_session: Session = Depends(get_db)):
 
 
 @router.get("/posts/{slug}", response_model=PostDetail)
-def get_post(slug: str, db_session: Session = Depends(get_db)):
+def get_post(
+    slug: str, db_session: Session = Depends(get_db), couch=Depends(get_couch)
+):
     """Get a single post by slug."""
     try:
-        blog_doc = _get_blog_doc_by_slug(slug)
+        couch_db, parser = couch
+        blog_doc = _get_blog_doc_by_slug(slug, couch_db)
         if not blog_doc:
             raise HTTPException(status_code=404, detail="Post not found")
 
-        post_data = parse_post_data(blog_doc, slug, include_content=True)
+        post_data = parse_post_data(blog_doc, slug, include_content=True, parser=parser)
         if not post_data:
             raise HTTPException(status_code=500, detail="Failed to parse post")
 
@@ -104,8 +108,10 @@ def increment_post_views(
     slug: str,
     request: Request,
     db_session: Session = Depends(get_db),
+    couch=Depends(get_couch),
 ):
-    blog_doc = _get_blog_doc_by_slug(slug)
+    couch_db, _parser = couch
+    blog_doc = _get_blog_doc_by_slug(slug, couch_db)
     if not blog_doc:
         raise HTTPException(status_code=404, detail="Post not found")
 
@@ -124,18 +130,18 @@ def increment_post_views(
         raise HTTPException(status_code=500, detail="Failed to record view")
 
 
-def _get_blog_doc_by_slug(slug: str) -> Optional[dict]:
+def _get_blog_doc_by_slug(slug: str, couch_db) -> Optional[dict]:
     doc_id = f"{config.BLOG_PREFIX}{slug}.md"
 
     try:
         encoded_doc_id = urllib.parse.quote(doc_id, safe="")
-        blog_doc = db.get(encoded_doc_id)
+        blog_doc = couch_db.get(encoded_doc_id)
         if _is_valid_blog_doc(blog_doc):
             return blog_doc
     except Exception as e:
         logger.warning(f"Direct fetch failed for {doc_id}: {e}")
 
-    all_docs = [row.get("doc", row) for row in db.all(include_docs=True)]
+    all_docs = [row.get("doc", row) for row in couch_db.all(include_docs=True)]
     return next(
         (
             doc

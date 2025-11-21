@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
-from app.db import couchdb
+from app.db.couchdb import get_couch
 from app.services.image_service import get_image_from_couchdb
 
 logger = logging.getLogger(__name__)
@@ -11,12 +11,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_image_dependencies():
-    return couchdb.db, couchdb.parser
-
-
 @router.get("/images/{image_path:path}")
-async def get_image(image_path: str, deps=Depends(get_image_dependencies)):
+async def get_image(image_path: str, deps=Depends(get_couch)):
     """
     Serve images directly from CouchDB
     """
