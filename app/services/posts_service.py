@@ -8,6 +8,7 @@ import frontmatter
 
 from app.config import config
 from app.schemas.blog import PostDetail, PostSummary
+from app.services.content_parser import ContentParser
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +17,20 @@ class PostsService:
     def __init__(
         self,
         repo,
-        parser,
         view_service,
         *,
+        parser=None,
         process_image_refs=None,
         base_image_url: str | None = None,
     ):
         self.repo = repo
-        self.parser = parser
         self.view_service = view_service
         self.process_image_refs = process_image_refs or _process_image_refs
         self.base_image_url = base_image_url or config.BLOG_API_URL
+
+        if parser is None and hasattr(repo, "db"):
+            parser = ContentParser(repo.db)
+        self.parser = parser
 
     def list_posts(self) -> List[PostSummary]:
         docs = self.repo.list_blog_docs()

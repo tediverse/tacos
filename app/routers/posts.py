@@ -56,6 +56,7 @@ def increment_post_views(
     request: Request,
     db: Session = Depends(get_db),
     couch=Depends(get_couch),
+    view_service=Depends(deps.get_post_view_service),
 ):
     couch_db, _parser = couch
     blog_doc = _get_blog_doc_by_slug(slug, couch_db)
@@ -63,7 +64,6 @@ def increment_post_views(
         raise HTTPException(status_code=404, detail="Post not found")
 
     client_ip = request.client.host if request.client else ""
-    view_service = deps.get_post_view_service(db)
 
     if client_ip and _should_skip_increment(client_ip, slug):
         views = view_service.get_view_count(slug)

@@ -18,8 +18,6 @@ def get_posts_repo():
 
 def get_posts_service(
     repo=Depends(get_posts_repo),
-    couch=Depends(get_couch),
     view_service=Depends(get_post_view_service),
 ):
-    _couch_db, parser = couch
-    return PostsService(repo=repo, parser=parser, view_service=view_service)
+    return PostsService(repo=repo, view_service=view_service)
