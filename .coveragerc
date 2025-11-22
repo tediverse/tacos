@@ -2,7 +2,11 @@
 branch = True
 omit =
     tests/*
+    app/db/couchdb.py
+    app/db/postgres/base.py
 
 [report]
 omit =
     tests/*
+    app/db/couchdb.py
+    app/db/postgres/base.py

@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.db.couchdb import get_couch
 from app.db.postgres.base import SessionLocal
-from app.db.postgres.last_seq_queries import get_last_seq, update_last_seq
 from app.models.doc import Doc
+from app.repos.last_seq_repo import LastSeqRepo
 from app.services.docs_ingester import ingest_doc
 from app.settings import settings
 
@@ -25,7 +25,8 @@ def listen_changes():
         try:
             couch_db, couch_parser = get_couch()
             with SessionLocal() as db_session:
-                last_seq = get_last_seq(db_session)
+                seq_repo = LastSeqRepo(db_session)
+                last_seq = seq_repo.get_last_seq()
                 url = (
                     f"{settings.couchdb_url}/{settings.COUCHDB_DATABASE}/_changes"
                     f"?feed=continuous&include_docs=true&since={last_seq}&heartbeat=true"
@@ -55,7 +56,7 @@ def listen_changes():
                         try:
                             change = json.loads(line)
                             last_seq = change.get("seq", last_seq)
-                            update_last_seq(db_session, last_seq)
+                            seq_repo.update_last_seq(last_seq)
                             process_change(change, db_session, couch_parser)
                         except json.JSONDecodeError:
                             logger.warning(f"Skipping invalid JSON line: {line}")

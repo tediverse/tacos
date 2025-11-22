@@ -57,9 +57,10 @@ class FakeResult:
 
 
 class FakeQuery:
-    def __init__(self, rows):
+    def __init__(self, rows, first_result=None):
         self.rows = rows
         self.filtered = None
+        self.first_result = first_result
 
     def filter(self, expr):
         self.filtered = expr
@@ -68,22 +69,33 @@ class FakeQuery:
     def all(self):
         return self.rows
 
+    def first(self):
+        if self.first_result is not None:
+            return self.first_result
+        return self.rows[0] if self.rows else None
+
 
 class FakeSession:
     """
     Lightweight SQLAlchemy Session stand-in for PostViewService tests.
     """
 
-    def __init__(self, rows=None, record_map=None, execute_value=1):
+    def __init__(self, rows=None, record_map=None, execute_value=1, first_result=None):
         self.rows = rows or []
         self.record_map = record_map or {}
         self.execute_value = execute_value
+        self.first_result = first_result
         self.executed_stmt = None
         self.committed = False
         self.last_query = None
+        self.offset = None
+        self.added = []
+        self.queried_model = None
 
     def query(self, *cols):
-        self.last_query = FakeQuery(self.rows)
+        if cols:
+            self.queried_model = cols[0]
+        self.last_query = FakeQuery(self.rows, first_result=self.first_result)
         return self.last_query
 
     def get(self, model, key):
@@ -96,6 +108,10 @@ class FakeSession:
 
         self.executed_stmt = stmt
         return FakeResult(self.execute_value)
+
+    def add(self, obj):
+        self.added.append(obj)
+        self.offset = obj
 
     def commit(self):
         self.committed = True

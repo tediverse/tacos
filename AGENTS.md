@@ -27,6 +27,7 @@ Secrets stay in `.env`, loaded through `python-dotenv`; never hard-code `TACOS_A
 ## Testing
 
 - Activate the virtualenv before tests: `. .venv/bin/activate && pytest -q` (or keep the shell activated for repeated runs).
+- When running pytest locally, set `PYTHONPATH=.` (e.g., `. .venv/bin/activate && PYTHONPATH=. pytest`) so the `app` package is importable without installing.
 - Run tests with `pytest -q`; add `--cov` for coverage when needed.
 - Avoid monkeypatching; prefer dependency injection. Refactor services to accept collaborators/config (e.g., base URLs, processors) as parameters so tests can pass fakes directly.
 - Keep tests close to the code they cover (e.g., `tests/services`, `tests/routers`).
