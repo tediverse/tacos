@@ -13,6 +13,7 @@ jobs:
       app_dir: /opt/tacos
       lxc_user: tacos
       alembic_migrate: "true"
+      run_tests: "true"
     secrets:
       LXC_HOST: ${{ secrets.LXC_HOST }}
       ENV_FILE: ${{ secrets.ENV_FILE }}
