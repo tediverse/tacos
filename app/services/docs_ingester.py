@@ -19,12 +19,17 @@ def ingest_doc(
     parser,
     enhance_content=content_enhancer.enhance_content,
     embed_text_fn=embed_text,
+    parse_post_data_fn=None,
+    chunk_text_fn=None,
 ) -> Optional[str]:
     """Ingest a single CouchDB doc into Postgres with chunking + embedding."""
 
+    parse_post_data_fn = parse_post_data_fn or parse_post_data
+    chunk_text_fn = chunk_text_fn or chunk_text
+
     # Parse via post_service (includes frontmatter handling)
     slug = raw_doc.get("path") or raw_doc["_id"]
-    post_data = parse_post_data(raw_doc, slug, include_content=True, parser=parser)
+    post_data = parse_post_data_fn(raw_doc, slug, include_content=True, parser=parser)
     if not post_data or not post_data.get("content"):
         logger.warning(f"Skipped doc {slug} (no content after parsing)")
         return None
@@ -34,7 +39,7 @@ def ingest_doc(
     slug = post_data.get("slug")
 
     # Chunk + embed
-    chunks = chunk_text(content, chunk_size=500, overlap=50)
+    chunks = chunk_text_fn(content, chunk_size=500, overlap=50)
     new_docs = []
     success_count = 0
 
@@ -87,8 +92,9 @@ def ingest_doc(
         return None
 
 
-def ingest_all(db: Session, *, parser):
+def ingest_all(db: Session, *, parser, ingest_fn=None):
     """One-time ingestion of all CouchDB docs. Also removes deleted docs."""
+    ingest_fn = ingest_fn or ingest_doc
     all_docs = [row.get("doc", row) for row in parser.db.all(include_docs=True)]
     for doc in all_docs:
         # Remove deleted docs from Postgres
@@ -108,7 +114,7 @@ def ingest_all(db: Session, *, parser):
         ):
             continue
 
-        ingest_doc(db, doc, parser=parser)
+        ingest_fn(db, doc, parser=parser)
 
 
 def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
@@ -119,7 +125,6 @@ def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
     while start < len(words):
         end = start + chunk_size
         chunk = " ".join(words[start:end])
-        if chunk.strip():
-            chunks.append(chunk)
+        chunks.append(chunk)
         start += chunk_size - overlap
     return chunks
