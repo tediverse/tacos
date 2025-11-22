@@ -15,7 +15,7 @@ FastAPI boots from `app/main.py`, with runtime settings centralized in `app/sett
 
 ## Coding Style & Naming Conventions
 
-Use 4-space indentation, Black-compatible wrapping, and type hints across routers, services, and schemas. Router callables should be imperative verbs (`create_post`, `query_rag`) and should only compose services plus response models. Pydantic types follow the `ThingPayload`/`ThingResponse` pattern in `app/schemas`. Keep environment lookups inside `config.py`, inject dependencies with FastAPI's `Depends`, and interact with external systems only inside service classes.
+Use 4-space indentation, Black-compatible wrapping, and type hints across routers, services, and schemas. Router callables should be imperative verbs (`create_post`, `query_rag`) and should only compose services plus response models. Pydantic types follow the `ThingPayload`/`ThingResponse` pattern in `app/schemas`. Keep environment lookups inside `settings.py`, inject dependencies with FastAPI's `Depends`, and interact with external systems only inside service classes.
 
 - Prefer dependency injection over module-level clients: avoid initializing CouchDB/Postgres/OpenAI at import time inside services; accept `db`/`parser`/clients as parameters (or via FastAPI `Depends`) so tests can pass fakes and imports stay side-effect free. Use `app.db.couchdb.get_couch()` to fetch `(couch_db, parser)` and `app.db.postgres.base.get_db` for Postgres sessions.
 - For HTTP routes, keep the flow router → service → repo (lightweight, Pythonic). Inject services via FastAPI dependencies; tests override the service in one place.
