@@ -8,22 +8,31 @@ from fastapi import HTTPException
 from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
-from app.config import config
 from app.models.doc import Doc
 from app.schemas.doc import DocResult
 from app.schemas.rag import ChatMessage, ContentChunk
 from app.services.content_enhancer import content_enhancer
 from app.services.query_expander import query_expander
 from app.services.text_embedder import embed_text
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
-client = AsyncOpenAI()
-
 
 class RAGService:
-    def __init__(self, db: Session):
+    def __init__(
+        self,
+        db: Session,
+        ai_client: AsyncOpenAI | None = None,
+        api_key: str | None = None,
+    ):
         self.db = db
+        if ai_client is None:
+            key = api_key or settings.OPENAI_API_KEY
+            if not key:
+                raise ValueError("OPENAI_API_KEY must be set to use RAGService")
+            ai_client = AsyncOpenAI(api_key=key)
+        self.ai_client = ai_client
 
     def get_relevant_documents(
         self, query: str, limit: int, threshold: float
@@ -80,15 +89,15 @@ class RAGService:
         """
         try:
             # Get regular results (reserve 1 spot for navigation)
-            regular_results = self.get_relevant_documents(query, limit-1, threshold)
-            
+            regular_results = self.get_relevant_documents(query, limit - 1, threshold)
+
             # Force include navigation content with high priority
             navigation_docs = (
                 self.db.query(Doc)
                 .filter(Doc.doc_metadata.op("->>")("contentType") == "navigation")
                 .all()
             )
-            
+
             # Convert navigation docs to DocResult with high similarity
             navigation_results = [
                 DocResult(
@@ -101,7 +110,7 @@ class RAGService:
                 )
                 for doc in navigation_docs
             ]
-            
+
             # Combine and ensure navigation is at top
             combined = navigation_results + regular_results
             combined.sort(key=lambda x: x.similarity, reverse=True)
@@ -112,7 +121,9 @@ class RAGService:
             # Fall back to regular search if navigation enhancement fails
             return self.get_relevant_documents(query, limit, threshold)
 
-    async def stream_chat_response(self, messages: List[ChatMessage], limit: int, threshold: float):
+    async def stream_chat_response(
+        self, messages: List[ChatMessage], limit: int, threshold: float
+    ):
         """Streams a chat response, using the retrieval logic to build context."""
 
         # The last message is always the user's question
@@ -120,9 +131,7 @@ class RAGService:
 
         # 1. Retrieve relevant docs using navigation-enhanced search
         relevant_docs = self.get_relevant_documents_with_navigation(
-            query=latest_user_question,
-            limit=limit,
-            threshold=threshold
+            query=latest_user_question, limit=limit, threshold=threshold
         )
 
         # 2. Build enriched context
@@ -131,18 +140,18 @@ class RAGService:
             md = doc.doc_metadata or {}
 
             # Generate URL based on document source
-            if doc.slug.startswith(config.BLOG_PREFIX):
-                url = f"{config.BASE_BLOG_URL}/{doc.slug}"
+            if doc.slug.startswith(settings.BLOG_PREFIX):
+                url = f"{settings.BASE_BLOG_URL}/{doc.slug}"
 
             # Navigation content describes all routes, so use the base URL
             elif doc.slug == "navigation:routes":
-                url = f"{config.BASE_BLOG_URL}"
+                url = f"{settings.BASE_BLOG_URL}"
             # Project
             elif doc.slug.startswith("projects"):
-                url = f"{config.BASE_BLOG_URL}/projects"
+                url = f"{settings.BASE_BLOG_URL}/projects"
             # Homepage
             elif doc.slug.startswith("/"):
-                url = f"{config.BASE_BLOG_URL}/"
+                url = f"{settings.BASE_BLOG_URL}/"
             else:
                 url = "N/A"
 
@@ -187,7 +196,7 @@ class RAGService:
 
         # 5. Stream response
         try:
-            stream = await client.chat.completions.create(
+            stream = await self.ai_client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=prompt_messages,
                 stream=True,
@@ -218,7 +227,7 @@ class RAGService:
             # Get existing portfolio documents for comparison
             existing_docs = (
                 self.db.query(Doc)
-                .filter(Doc.document_id.like(f"{config.PORTFOLIO_PREFIX}%"))
+                .filter(Doc.document_id.like(f"{settings.PORTFOLIO_PREFIX}%"))
                 .all()
             )
 
@@ -234,7 +243,7 @@ class RAGService:
                     content_hash = self._generate_content_hash(chunk)
 
                     # Create document ID with portfolio prefix (now using unique slugs)
-                    document_id = f"{config.PORTFOLIO_PREFIX}{chunk.slug}"
+                    document_id = f"{settings.PORTFOLIO_PREFIX}{chunk.slug}"
                     processed_doc_ids.add(document_id)
 
                     # Check if document exists and has same content hash
@@ -257,9 +266,9 @@ class RAGService:
                     enhanced_content = content_enhancer.enhance_content(
                         content=chunk.content,
                         title=chunk.title,
-                        metadata=chunk.metadata or {}
+                        metadata=chunk.metadata or {},
                     )
-                    
+
                     # Generate embedding for the enhanced content (only for new/changed content)
                     embedding = embed_text(enhanced_content)
 

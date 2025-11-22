@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from app.config import config
+from app.settings import settings
 
 
 class CouchPostsRepo:
@@ -13,12 +13,12 @@ class CouchPostsRepo:
             doc
             for doc in all_docs
             if doc.get("type") == "plain"
-            and doc.get("path", "").startswith(config.BLOG_PREFIX)
+            and doc.get("path", "").startswith(settings.BLOG_PREFIX)
             and not doc.get("deleted", False)
         ]
 
     def get_blog_doc(self, slug: str) -> Optional[dict]:
-        doc_id = f"{config.BLOG_PREFIX}{slug}.md"
+        doc_id = f"{settings.BLOG_PREFIX}{slug}.md"
         try:
             encoded_doc_id = doc_id.replace("/", "%2F")
             doc = self.db.get(encoded_doc_id)
@@ -39,6 +39,6 @@ class CouchPostsRepo:
         path = doc.get("path", doc.get("_id", ""))
         return (
             doc.get("type") == "plain"
-            and path.startswith(config.BLOG_PREFIX)
+            and path.startswith(settings.BLOG_PREFIX)
             and not doc.get("deleted", False)
         )

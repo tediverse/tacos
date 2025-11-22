@@ -1,5 +1,5 @@
-from app.config import config
 from app.repos.posts_repo import CouchPostsRepo
+from app.settings import settings
 from tests.conftest import FakeCouchDB
 
 
@@ -28,7 +28,7 @@ def test_list_blog_docs_filters_plain_prefix_and_deleted():
 
 def test_get_blog_doc_returns_direct_hit_with_encoded_slash():
     slug = "2024/hello"
-    doc_id = f"{config.BLOG_PREFIX}{slug}.md"  # blog/2024/hello.md
+    doc_id = f"{settings.BLOG_PREFIX}{slug}.md"  # blog/2024/hello.md
     encoded = doc_id.replace("/", "%2F")
     doc = {"_id": doc_id, "path": doc_id, "type": "plain"}
     # FakeCouchDB will raise NotFound when the requested key is missing
@@ -42,7 +42,7 @@ def test_get_blog_doc_returns_direct_hit_with_encoded_slash():
 
 def test_get_blog_doc_skips_invalid_direct_doc_and_falls_back():
     slug = "2024/hello"
-    doc_id = f"{config.BLOG_PREFIX}{slug}.md"
+    doc_id = f"{settings.BLOG_PREFIX}{slug}.md"
     encoded = doc_id.replace("/", "%2F")
     invalid = {"_id": encoded, "path": encoded, "type": "leaf"}  # not valid
     valid = {"_id": doc_id, "path": doc_id, "type": "plain"}
@@ -59,7 +59,7 @@ def test_get_blog_doc_skips_invalid_direct_doc_and_falls_back():
 
 def test_get_blog_doc_falls_back_to_list_when_direct_missing():
     slug = "2023/missing-direct"
-    doc_id = f"{config.BLOG_PREFIX}{slug}.md"
+    doc_id = f"{settings.BLOG_PREFIX}{slug}.md"
     doc = {"_id": doc_id, "path": doc_id, "type": "plain"}
     # Only unencoded id present to force fallback path
     repo = CouchPostsRepo(FakeCouchDB({doc_id: doc}, track_calls=True))
@@ -85,17 +85,17 @@ def test_get_blog_doc_returns_none_when_not_found():
 
 def test_is_valid_checks_type_prefix_and_deleted():
     assert (
-        CouchPostsRepo._is_valid({"type": "plain", "path": f"{config.BLOG_PREFIX}x"})
+        CouchPostsRepo._is_valid({"type": "plain", "path": f"{settings.BLOG_PREFIX}x"})
         is True
     )
     assert (
-        CouchPostsRepo._is_valid({"type": "leaf", "path": f"{config.BLOG_PREFIX}x"})
+        CouchPostsRepo._is_valid({"type": "leaf", "path": f"{settings.BLOG_PREFIX}x"})
         is False
     )
     assert CouchPostsRepo._is_valid({"type": "plain", "path": "other/x"}) is False
     assert (
         CouchPostsRepo._is_valid(
-            {"type": "plain", "path": f"{config.BLOG_PREFIX}x", "deleted": True}
+            {"type": "plain", "path": f"{settings.BLOG_PREFIX}x", "deleted": True}
         )
         is False
     )

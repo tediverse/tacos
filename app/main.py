@@ -3,14 +3,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 
-from app.config import config
 from app.routers import images, posts, rag
 from app.security import get_api_key
 from app.services.couchdb_listener import start_listener, stop_listener
+from app.settings import settings
 
 # Configure logging
 logging.basicConfig(
-    level=getattr(logging, config.LOG_LEVEL.upper()),
+    level=getattr(logging, settings.LOG_LEVEL.upper()),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)

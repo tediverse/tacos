@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-FastAPI boots from `app/main.py`, with runtime settings centralized in `app/config.py` and shared DB helpers in `app/db`. Keep HTTP concerns inside `app/routers/` (currently `posts.py`, `images.py`, `rag.py`) and delegate heavy lifting to the matching module under `app/services/`. SQLAlchemy tables live in `app/models`, while request/response contracts belong in `app/schemas`. Use `alembic/` for migrations, stash reference material in `docs/`, and mirror this layout under `tests/` (e.g., `tests/routers/test_posts.py`).
+FastAPI boots from `app/main.py`, with runtime settings centralized in `app/settings.py` and shared DB helpers in `app/db`. Keep HTTP concerns inside `app/routers/` (currently `posts.py`, `images.py`, `rag.py`) and delegate heavy lifting to the matching module under `app/services/`. SQLAlchemy tables live in `app/models`, while request/response contracts belong in `app/schemas`. Use `alembic/` for migrations, stash reference material in `docs/`, and mirror this layout under `tests/` (e.g., `tests/routers/test_posts.py`).
 
 ## Build, Test, and Development Commands
 

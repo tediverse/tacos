@@ -7,11 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app import dependencies as deps
-from app.config import config
 from app.db.couchdb import get_couch
 from app.db.postgres.base import get_db
 from app.schemas.blog import PostDetail, PostSummary
 from app.services.posts_service import PostsService
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def increment_post_views(
 
 
 def _get_blog_doc_by_slug(slug: str, couch_db) -> Optional[dict]:
-    doc_id = f"{config.BLOG_PREFIX}{slug}.md"
+    doc_id = f"{settings.BLOG_PREFIX}{slug}.md"
 
     try:
         encoded_doc_id = urllib.parse.quote(doc_id, safe="")
@@ -105,7 +105,7 @@ def _is_valid_blog_doc(doc: dict) -> bool:
     path = doc.get("path", doc.get("_id", ""))
     return (
         doc.get("type") == "plain"
-        and path.startswith(config.BLOG_PREFIX)
+        and path.startswith(settings.BLOG_PREFIX)
         and not doc.get("deleted", False)
     )
 

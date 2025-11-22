@@ -3,7 +3,6 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from openai import AsyncOpenAI
 from sqlalchemy.orm import Session
 
 from app.db.couchdb import get_couch
@@ -12,14 +11,14 @@ from app.schemas.doc import DocResult
 from app.schemas.rag import PromptRequest, UpdateContentRequest, UpdateContentResponse
 from app.services.docs_ingester import ingest_all
 from app.services.rag_service import RAGService
+from app.settings import settings
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-client = AsyncOpenAI()
 
 
 def get_rag_service(db: Session = Depends(get_db)) -> RAGService:
-    return RAGService(db)
+    return RAGService(db, api_key=settings.OPENAI_API_KEY)
 
 
 @router.post("/prompt")

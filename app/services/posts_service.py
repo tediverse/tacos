@@ -6,9 +6,9 @@ from typing import List, Optional
 
 import frontmatter
 
-from app.config import config
 from app.schemas.blog import PostDetail, PostSummary
 from app.services.content_parser import ContentParser
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class PostsService:
         self.repo = repo
         self.view_service = view_service
         self.process_image_refs = process_image_refs or _process_image_refs
-        self.base_image_url = base_image_url or config.BLOG_API_URL
+        self.base_image_url = base_image_url or settings.BLOG_API_URL
 
         if parser is None and hasattr(repo, "db"):
             parser = ContentParser(repo.db)
@@ -98,7 +98,7 @@ def parse_post_data(
         if process_image_refs is None:
             process_image_refs = _process_image_refs
 
-        image_base = base_image_url or config.BLOG_API_URL
+        image_base = base_image_url or settings.BLOG_API_URL
 
         image_field = metadata.get("image")
         processed_image = (

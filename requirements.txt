@@ -4,6 +4,7 @@ pycouchdb
 python-frontmatter
 python-dotenv
 pydantic
+pydantic-settings
 alembic
 psycopg2-binary
 sqlalchemy

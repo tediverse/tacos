@@ -5,12 +5,12 @@ import threading
 import httpx
 from sqlalchemy.orm import Session
 
-from app.config import config
 from app.db.couchdb import get_couch
 from app.db.postgres.base import SessionLocal
 from app.db.postgres.last_seq_queries import get_last_seq, update_last_seq
 from app.models.doc import Doc
 from app.services.docs_ingester import ingest_doc
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def listen_changes():
             with SessionLocal() as db_session:
                 last_seq = get_last_seq(db_session)
                 url = (
-                    f"{config.couchdb_url}/{config.COUCHDB_DATABASE}/_changes"
+                    f"{settings.couchdb_url}/{settings.COUCHDB_DATABASE}/_changes"
                     f"?feed=continuous&include_docs=true&since={last_seq}&heartbeat=true"
                 )
                 logger.info(f"Connecting to CouchDB _changes since ({last_seq})...")
@@ -94,7 +94,9 @@ def process_change(change: dict, db_session: Session, parser):
         return
 
     path = doc.get("path", "")
-    if not (path.startswith(config.BLOG_PREFIX) or path.startswith(config.KB_PREFIX)):
+    if not (
+        path.startswith(settings.BLOG_PREFIX) or path.startswith(settings.KB_PREFIX)
+    ):
         logger.debug(f"Skipping doc outside blog/kb paths {doc['_id']}")
         return
 

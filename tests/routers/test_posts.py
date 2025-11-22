@@ -146,7 +146,7 @@ def test_increment_views_happy_path():
         def get_view_count(self, slug):
             return 0
 
-    doc_id = f"{posts.config.BLOG_PREFIX}slug-1.md"
+    doc_id = f"{posts.settings.BLOG_PREFIX}slug-1.md"
     fake_couch = FakeCouch({"_id": doc_id, "path": doc_id, "type": "plain"})
 
     deps_overrides = {
@@ -199,7 +199,7 @@ def test_increment_views_skips_when_recent():
         def get_view_count(self, slug):
             return 2
 
-    doc_id = f"{posts.config.BLOG_PREFIX}slug.md"
+    doc_id = f"{posts.settings.BLOG_PREFIX}slug.md"
     fake_couch = FakeCouch({"_id": doc_id, "path": doc_id, "type": "plain"})
 
     deps_overrides = {
@@ -233,7 +233,7 @@ def test_increment_views_returns_500_on_error():
         def get_view_count(self, slug):
             return 0
 
-    doc_id = f"{posts.config.BLOG_PREFIX}slug.md"
+    doc_id = f"{posts.settings.BLOG_PREFIX}slug.md"
     fake_couch = FakeCouch({"_id": doc_id, "path": doc_id, "type": "plain"})
 
     app.dependency_overrides[deps.get_posts_service] = lambda: FakePostsService()
@@ -257,7 +257,7 @@ def test_is_valid_blog_doc_helper():
 
 
 def test_get_blog_doc_by_slug_logs_warning_and_falls_back(caplog):
-    doc_id = f"{posts.config.BLOG_PREFIX}slug.md"
+    doc_id = f"{posts.settings.BLOG_PREFIX}slug.md"
 
     class ErrorCouch(FakeCouch):
         def get(self, doc_id):

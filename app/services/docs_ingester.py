@@ -3,11 +3,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.config import config
 from app.models.doc import Doc
 from app.services.content_enhancer import content_enhancer
 from app.services.posts_service import parse_post_data
 from app.services.text_embedder import embed_text
+from app.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ def ingest_doc(
                         "updated_at": post_data.get("updatedAt"),
                         "summary": post_data.get("summary"),
                         "source": (
-                            "blog" if slug.startswith(config.BLOG_PREFIX) else "kb"
+                            "blog" if slug.startswith(settings.BLOG_PREFIX) else "kb"
                         ),
                     },
                 )
@@ -104,7 +104,7 @@ def ingest_all(db: Session, *, parser):
         # Only ingest docs under specific paths
         path = doc.get("path", "")
         if not (
-            path.startswith(config.BLOG_PREFIX) or path.startswith(config.KB_PREFIX)
+            path.startswith(settings.BLOG_PREFIX) or path.startswith(settings.KB_PREFIX)
         ):
             continue
 

@@ -2,7 +2,6 @@ import datetime
 
 import pytest
 
-from app.config import config
 from app.schemas.blog import PostDetail, PostSummary
 from app.services.posts_service import (
     PostsService,
@@ -15,6 +14,7 @@ from app.services.posts_service import (
     calculate_reading_time,
     parse_post_data,
 )
+from app.settings import settings
 from tests.conftest import FakeParser, FakeRepo, FakeViewService
 
 
@@ -290,7 +290,7 @@ def test_parse_post_data_uses_default_base_image_url_when_not_provided():
 
     result = parse_post_data(doc, "base", include_content=False, parser=parser)
 
-    assert result["image"] == f"{config.BLOG_API_URL}/images/base.jpg"
+    assert result["image"] == f"{settings.BLOG_API_URL}/images/base.jpg"
 
 
 def test_parse_post_data_processes_content_with_default_image_refs():
