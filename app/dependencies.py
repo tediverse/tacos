@@ -11,8 +11,8 @@ def get_post_view_service(db=Depends(get_db)):
     return PostViewService(db)
 
 
-def get_posts_repo():
-    couch_db, _parser = get_couch()
+def get_posts_repo(couch=Depends(get_couch)):
+    couch_db, _parser = couch
     return CouchPostsRepo(couch_db)
 
 
