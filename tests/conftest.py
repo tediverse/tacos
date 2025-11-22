@@ -61,18 +61,34 @@ class FakeQuery:
         self.rows = rows
         self.filtered = None
         self.first_result = first_result
+        self.order_expr = None
+        self.limit_value = None
 
     def filter(self, expr):
         self.filtered = expr
         return self
 
+    def order_by(self, expr):
+        self.order_expr = expr
+        return self
+
+    def limit(self, value):
+        self.limit_value = value
+        return self
+
     def all(self):
-        return self.rows
+        if self.limit_value is None:
+            return self.rows
+        return self.rows[: self.limit_value]
 
     def first(self):
         if self.first_result is not None:
             return self.first_result
         return self.rows[0] if self.rows else None
+
+    def delete(self, synchronize_session=None):
+        # returns 0 deletions by default
+        return 0
 
 
 class FakeSession:

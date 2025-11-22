@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.doc import Doc
-from app.services.content_enhancer import content_enhancer
+from app.services.content_enhancer import ContentEnhancer
 from app.services.posts_service import parse_post_data
 from app.services.text_embedder import embed_text
 from app.settings import settings
@@ -17,7 +17,7 @@ def ingest_doc(
     raw_doc: dict,
     *,
     parser,
-    enhance_content=content_enhancer.enhance_content,
+    enhance_content=ContentEnhancer().enhance_content,
     embed_text_fn=embed_text,
     parse_post_data_fn=None,
     chunk_text_fn=None,

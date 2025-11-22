@@ -46,7 +46,3 @@ class ContentEnhancer:
             f"Enhanced content from {len(content)} to {len(enhanced_content)} chars"
         )
         return enhanced_content
-
-
-# Global instance for easy access
-content_enhancer = ContentEnhancer()

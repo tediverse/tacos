@@ -1,6 +1,7 @@
 import json
 import logging
 import threading
+from typing import Callable
 
 import httpx
 from sqlalchemy.orm import Session
@@ -10,7 +11,7 @@ from app.db.postgres.base import SessionLocal
 from app.models.doc import Doc
 from app.repos.last_seq_repo import LastSeqRepo
 from app.services.docs_ingester import ingest_doc
-from app.settings import settings
+from app.settings import Settings, settings
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +76,15 @@ def listen_changes():
             backoff = min(backoff * 2, 60)  # cap backoff at 60s
 
 
-def process_change(change: dict, db_session: Session, parser):
+def process_change(
+    change: dict,
+    db_session: Session,
+    parser,
+    *,
+    ingest_fn: Callable = ingest_doc,
+    settings_obj: Settings = settings,
+    doc_model=Doc,
+):
     """Process a single CouchDB change entry"""
     doc = change.get("doc")
     if not doc:
@@ -85,7 +94,11 @@ def process_change(change: dict, db_session: Session, parser):
     doc_id = doc.get("_id")
     if doc.get("deleted", False):
         # Delete from Postgres
-        deleted_count = db_session.query(Doc).filter(Doc.document_id == doc_id).delete()
+        deleted_count = (
+            db_session.query(doc_model)
+            .filter(doc_model.document_id == doc_id)
+            .delete()
+        )
         db_session.commit()
         logger.info(f"Deleted {deleted_count} chunks for doc {doc_id}")
         return
@@ -96,13 +109,14 @@ def process_change(change: dict, db_session: Session, parser):
 
     path = doc.get("path", "")
     if not (
-        path.startswith(settings.BLOG_PREFIX) or path.startswith(settings.KB_PREFIX)
+        path.startswith(settings_obj.BLOG_PREFIX)
+        or path.startswith(settings_obj.KB_PREFIX)
     ):
         logger.debug(f"Skipping doc outside blog/kb paths {doc['_id']}")
         return
 
     try:
-        ingest_doc(db_session, doc, parser=parser)
+        ingest_fn(db_session, doc, parser=parser)
     except Exception as e:
         logger.error(f"Failed to ingest doc {doc['_id']}: {e}")
 

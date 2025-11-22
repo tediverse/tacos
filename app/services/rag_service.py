@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from app.models.doc import Doc
 from app.schemas.doc import DocResult
 from app.schemas.rag import ChatMessage, ContentChunk
-from app.services.content_enhancer import content_enhancer
-from app.services.query_expander import query_expander
+from app.services.content_enhancer import ContentEnhancer
+from app.services.query_expander import QueryExpander
 from app.services.text_embedder import embed_text
 from app.settings import settings
 
@@ -25,6 +25,10 @@ class RAGService:
         db: Session,
         ai_client: AsyncOpenAI | None = None,
         api_key: str | None = None,
+        query_expander_service: QueryExpander | None = None,
+        embed_text_fn=embed_text,
+        content_enhancer_service: ContentEnhancer | None = None,
+        doc_model=Doc,
     ):
         self.db = db
         if ai_client is None:
@@ -33,6 +37,10 @@ class RAGService:
                 raise ValueError("OPENAI_API_KEY must be set to use RAGService")
             ai_client = AsyncOpenAI(api_key=key)
         self.ai_client = ai_client
+        self.query_expander = query_expander_service or QueryExpander()
+        self.embed_text_fn = embed_text_fn
+        self.content_enhancer = content_enhancer_service or ContentEnhancer()
+        self.doc_model = doc_model
 
     def get_relevant_documents(
         self, query: str, limit: int, threshold: float
@@ -44,17 +52,17 @@ class RAGService:
 
         try:
             # Expand query to improve semantic matching
-            expanded_query = query_expander.expand_query(query)
-            embedding = embed_text(expanded_query)
+            expanded_query = self.query_expander.expand_query(query)
+            embedding = self.embed_text_fn(expanded_query)
             if not embedding or len(embedding) != 1536:
                 raise HTTPException(400, "Invalid embedding for query")
 
-            distance = Doc.embedding.cosine_distance(embedding)
+            distance = self.doc_model.embedding.cosine_distance(embedding)
             similarity = (1 - distance).label("similarity")
 
             results = (
-                self.db.query(Doc, similarity)
-                .filter(Doc.embedding.isnot(None))
+                self.db.query(self.doc_model, similarity)
+                .filter(self.doc_model.embedding.isnot(None))
                 .filter(similarity >= threshold)
                 .order_by(similarity.desc())
                 .limit(limit)
@@ -93,8 +101,8 @@ class RAGService:
 
             # Force include navigation content with high priority
             navigation_docs = (
-                self.db.query(Doc)
-                .filter(Doc.doc_metadata.op("->>")("contentType") == "navigation")
+                self.db.query(self.doc_model)
+                .filter(self.doc_model.doc_metadata.op("->>")("contentType") == "navigation")
                 .all()
             )
 
@@ -226,8 +234,8 @@ class RAGService:
         try:
             # Get existing portfolio documents for comparison
             existing_docs = (
-                self.db.query(Doc)
-                .filter(Doc.document_id.like(f"{settings.PORTFOLIO_PREFIX}%"))
+                self.db.query(self.doc_model)
+                .filter(self.doc_model.document_id.like(f"{settings.PORTFOLIO_PREFIX}%"))
                 .all()
             )
 
@@ -263,14 +271,14 @@ class RAGService:
                         logger.debug(f"New content: {document_id}")
 
                     # Enhance content with metadata before embedding
-                    enhanced_content = content_enhancer.enhance_content(
+                    enhanced_content = self.content_enhancer.enhance_content(
                         content=chunk.content,
                         title=chunk.title,
                         metadata=chunk.metadata or {},
                     )
 
                     # Generate embedding for the enhanced content (only for new/changed content)
-                    embedding = embed_text(enhanced_content)
+                    embedding = self.embed_text_fn(enhanced_content)
 
                     if existing_doc:
                         # Update existing document
@@ -285,7 +293,7 @@ class RAGService:
                         existing_doc.embedding = embedding
                     else:
                         # Create new document
-                        doc = Doc(
+                        doc = self.doc_model(
                             document_id=document_id,
                             slug=chunk.slug,
                             title=chunk.title,
@@ -312,8 +320,8 @@ class RAGService:
             doc_ids_to_remove = set(existing_docs_map.keys()) - processed_doc_ids
             if doc_ids_to_remove:
                 deleted_count = (
-                    self.db.query(Doc)
-                    .filter(Doc.document_id.in_(doc_ids_to_remove))
+                    self.db.query(self.doc_model)
+                    .filter(self.doc_model.document_id.in_(doc_ids_to_remove))
                     .delete(synchronize_session=False)
                 )
                 logger.info(f"Deleted {deleted_count} removed portfolio documents")

@@ -21,6 +21,11 @@ def get_rag_service(db: Session = Depends(get_db)) -> RAGService:
     return RAGService(db, api_key=settings.OPENAI_API_KEY)
 
 
+def get_ingest_all():
+    """Provide ingest_all for dependency override in tests."""
+    return ingest_all
+
+
 @router.post("/prompt")
 async def prompt_rag(
     request: PromptRequest,
@@ -48,14 +53,18 @@ async def prompt_rag(
 
 
 @router.post("/reingest")
-def reingest(db: Session = Depends(get_db)):
+def reingest(
+    db: Session = Depends(get_db),
+    couch=Depends(get_couch),
+    ingest_all_fn=Depends(get_ingest_all),
+):
     """
     Full ingestion/reset endpoint.
     Deletes old docs and re-ingests all CouchDB content.
     """
     try:
-        couch_db, parser = get_couch()
-        ingest_all(db, parser=parser)
+        couch_db, parser = couch
+        ingest_all_fn(db, parser=parser)
         return {"status": "success", "message": "ingestion completed."}
     except Exception as e:
         logger.error(f"Reset ingest failed: {e}", exc_info=True)

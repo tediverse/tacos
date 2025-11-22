@@ -2,9 +2,12 @@ import uuid
 from typing import Any, Dict
 
 from pydantic import BaseModel, Field
+from pydantic.config import ConfigDict
 
 
 class DocResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: uuid.UUID
     slug: str | None = None
     title: str | None = None
@@ -16,6 +19,3 @@ class DocResult(BaseModel):
         le=1,
         description="The cosine similarity score between the query and the document.",
     )
-
-    class Config:
-        from_attributes = True

@@ -1,47 +1,40 @@
-import asyncio
-
 import pytest
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
-from app.security import API_KEY_NAME, get_api_key
+from app.security import API_KEY_NAME, get_api_key, get_settings
 from app.settings import Settings
 
 
-def test_get_api_key_accepts_valid_key(monkeypatch):
+def test_get_api_key_accepts_valid_key():
     settings = Settings(TACOS_API_KEY="secret")
-    # patch the function's module-level settings reference
-    monkeypatch.setattr("app.security.settings", settings)
-
-    result = asyncio.run(get_api_key(api_key_header="secret"))
-    assert result == "secret"
+    assert get_api_key("secret", settings) == "secret"
 
 
-def test_get_api_key_rejects_invalid_key(monkeypatch):
+def test_get_api_key_rejects_invalid_key():
     settings = Settings(TACOS_API_KEY="secret")
-    monkeypatch.setattr("app.security.settings", settings)
+    with pytest.raises(HTTPException) as exc:
+        get_api_key("wrong", settings)
+    assert exc.value.status_code == 403
 
-    with pytest.raises(Exception):
-        asyncio.run(get_api_key(api_key_header="wrong"))
 
-
-def test_get_api_key_rejects_missing_header(monkeypatch):
+def test_get_api_key_rejects_missing_header():
     settings = Settings(TACOS_API_KEY="secret")
-    monkeypatch.setattr("app.security.settings", settings)
+    with pytest.raises(HTTPException) as exc:
+        get_api_key(None, settings)
+    assert exc.value.status_code == 403
 
-    with pytest.raises(Exception):
-        asyncio.run(get_api_key(api_key_header=None))  # type: ignore
 
-
-def test_dependency_in_route_accepts_valid_key(monkeypatch):
+def test_dependency_in_route_accepts_valid_key():
     settings = Settings(TACOS_API_KEY="secret")
-    monkeypatch.setattr("app.security.settings", settings)
 
     app = FastAPI()
 
     @app.get("/secure")
-    async def secure(key=Depends(get_api_key)):
+    def secure(key=Depends(get_api_key)):
         return {"ok": True}
+
+    app.dependency_overrides[get_settings] = lambda: settings
 
     client = TestClient(app)
     res = client.get("/secure", headers={API_KEY_NAME: "secret"})
@@ -49,15 +42,16 @@ def test_dependency_in_route_accepts_valid_key(monkeypatch):
     assert res.json() == {"ok": True}
 
 
-def test_dependency_in_route_rejects_invalid_key(monkeypatch):
+def test_dependency_in_route_rejects_invalid_key():
     settings = Settings(TACOS_API_KEY="secret")
-    monkeypatch.setattr("app.security.settings", settings)
 
     app = FastAPI()
 
     @app.get("/secure")
-    async def secure(key=Depends(get_api_key)):
+    def secure(key=Depends(get_api_key)):
         return {"ok": True}
+
+    app.dependency_overrides[get_settings] = lambda: settings
 
     client = TestClient(app)
     res = client.get("/secure", headers={API_KEY_NAME: "wrong"})

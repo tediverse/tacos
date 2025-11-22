@@ -281,7 +281,7 @@ def test_ingest_all_filters_docs_and_calls_ingest():
     assert ingested == ["blog/keep.md", "kb/keep.md"]
 
 
-def test_ingest_all_deletes_marked_docs(monkeypatch):
+def test_ingest_all_deletes_marked_docs():
     docs = {
         "gone": {"_id": "blog/gone.md", "deleted": True, "type": "plain"},
     }
