@@ -1,8 +1,25 @@
+from llama_index.core.base.embeddings.base import BaseEmbedding
+
 from app.models.doc import Doc
 from app.services.docs_ingester import chunk_text, ingest_all, ingest_doc
 from app.settings import settings
 from tests.conftest import FakeCouchDB, FakeQuery
 from tests.conftest import FakeSession as BaseSession
+
+
+class FakeEmbed(BaseEmbedding):
+    """Minimal embedder to avoid external calls in tests."""
+
+    model_name: str = "fake"
+
+    def _get_query_embedding(self, _text: str):
+        return [0.0, 0.0]
+
+    async def _aget_query_embedding(self, _text: str):
+        return [0.0, 0.0]
+
+    def _get_text_embedding(self, _text: str):
+        return [0.0, 0.0]
 
 
 class IngestFakeQuery(FakeQuery):
@@ -37,6 +54,11 @@ class IngestFakeSession(BaseSession):
         self.committed = True
 
 
+def fake_chunk_text(text, *_args, **_kwargs):
+    """Return the full text as a single chunk to avoid networked splitters."""
+    return [text] if text else []
+
+
 def test_ingest_doc_returns_none_when_parse_fails():
     db = IngestFakeSession()
     raw_doc = {"_id": "blog/empty.md", "path": "blog/empty.md"}
@@ -46,6 +68,7 @@ def test_ingest_doc_returns_none_when_parse_fails():
         raw_doc,
         parser=object(),
         parse_post_data_fn=lambda *args, **kwargs: None,
+        chunk_text_fn=fake_chunk_text,
     )
 
     assert result is None
@@ -67,6 +90,7 @@ def test_ingest_doc_returns_none_when_content_missing():
             "title": "No Content",
             "content": None,
         },
+        chunk_text_fn=fake_chunk_text,
     )
 
     assert result is None
@@ -103,6 +127,7 @@ def test_ingest_doc_ingests_and_replaces_existing():
         enhance_content=fake_enhance_content,
         embed_text_fn=lambda text: [0.1, 0.2, 0.3],
         parse_post_data_fn=fake_parse,
+        chunk_text_fn=fake_chunk_text,
     )
 
     assert result == "blog/hello"
@@ -295,12 +320,13 @@ def test_ingest_all_deletes_marked_docs():
     assert db.committed is True
 
 
-def test_chunk_text_respects_overlap():
+def test_chunk_text():
     text = "one two three four five six"
-    result = chunk_text(text, chunk_size=3, overlap=1)
+    result = chunk_text(text, embed_model=FakeEmbed())
 
-    assert result == ["one two three", "three four five", "five six"]
+    assert isinstance(result, list)
+    assert all(isinstance(chunk, str) and chunk for chunk in result)
 
 
 def test_chunk_text_handles_empty_string():
-    assert chunk_text("") == []
+    assert chunk_text("", embed_model=FakeEmbed()) == []

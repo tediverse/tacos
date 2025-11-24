@@ -1,6 +1,9 @@
 import logging
 from typing import Optional
 
+from llama_index.core import Document
+from llama_index.core.node_parser import SemanticSplitterNodeParser
+from llama_index.embeddings.openai import OpenAIEmbedding
 from sqlalchemy.orm import Session
 
 from app.models.doc import Doc
@@ -39,7 +42,7 @@ def ingest_doc(
     slug = post_data.get("slug")
 
     # Chunk + embed
-    chunks = chunk_text_fn(content, chunk_size=500, overlap=50)
+    chunks = chunk_text_fn(content)
     new_docs = []
     success_count = 0
 
@@ -117,14 +120,23 @@ def ingest_all(db: Session, *, parser, ingest_fn=None):
         ingest_fn(db, doc, parser=parser)
 
 
-def chunk_text(text: str, chunk_size: int = 500, overlap: int = 50):
-    """Split text into overlapping chunks by words."""
-    words = text.split()
-    chunks = []
-    start = 0
-    while start < len(words):
-        end = start + chunk_size
-        chunk = " ".join(words[start:end])
-        chunks.append(chunk)
-        start += chunk_size - overlap
-    return chunks
+def chunk_text(
+    text: str,
+    *,
+    embed_model=None,
+) -> list[str]:
+    """
+    Chunk text for embedding using LlamaIndex semantic splitter.
+    Keeping the surface area small: supply a custom embed_model in tests to avoid network calls.
+    """
+    if not text:
+        return []
+
+    embed_model = embed_model or OpenAIEmbedding(
+        model="text-embedding-3-small",
+        api_key=settings.OPENAI_API_KEY or None,
+    )
+
+    splitter = SemanticSplitterNodeParser(embed_model=embed_model)
+    nodes = splitter.get_nodes_from_documents([Document(text=text)])
+    return [node.get_content() for node in nodes if node.get_content().strip()]

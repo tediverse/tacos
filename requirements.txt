@@ -10,3 +10,5 @@ psycopg2-binary
 sqlalchemy
 pgvector
 openai
+llama-index-core
+llama-index-embeddings-openai

@@ -80,7 +80,7 @@ def test_posts_routes_enforce_api_key(monkeypatch):
 
             res = client.get("/posts", headers={API_KEY_NAME: "secret"})
             assert res.status_code == 200
-            assert res.json() == [fake_post.dict()]
+            assert res.json() == [fake_post.model_dump()]
     finally:
         app.dependency_overrides = original_overrides
 
