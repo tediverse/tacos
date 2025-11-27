@@ -1,7 +1,14 @@
+from textwrap import dedent
+
 from llama_index.core.base.embeddings.base import BaseEmbedding
 
 from app.models.doc import Doc
-from app.services.docs_ingester import chunk_text, ingest_all, ingest_doc
+from app.services.docs_ingester import (
+    chunk_text,
+    ingest_all,
+    ingest_doc,
+    normalize_heading,
+)
 from app.settings import settings
 from tests.conftest import FakeCouchDB, FakeQuery
 from tests.conftest import FakeSession as BaseSession
@@ -145,6 +152,55 @@ def test_ingest_doc_ingests_and_replaces_existing():
     assert db.queries[0].delete_kwargs == {"synchronize_session": False}
     assert db.committed is True
     assert calls[0]["metadata"]["summary"] == "Summary text"
+
+
+def test_ingest_doc_sets_section_and_order_metadata():
+    db = IngestFakeSession()
+    raw_doc = {"_id": "doc-sections", "path": f"{settings.BLOG_PREFIX}sections.md"}
+
+    content = dedent(
+        """
+        # Title 😎
+        ## Section One 🚀
+        Alpha line
+        ## Section Two 🧠
+        Bravo line
+        """
+    ).strip()
+
+    parse_fn = lambda *_args, **_kwargs: {
+        "content": content,
+        "slug": "blog/sections",
+        "title": "Doc With Sections",
+    }
+
+    chunk_text_fn = lambda *_args, **_kwargs: ["Alpha line", "Bravo line"]
+
+    ingest_doc(
+        db,
+        raw_doc,
+        parser=object(),
+        parse_post_data_fn=parse_fn,
+        chunk_text_fn=chunk_text_fn,
+        enhance_content=lambda **kwargs: kwargs["content"],
+        embed_text_fn=lambda _text: [0.0, 0.0],
+    )
+
+    assert len(db.added) == 2
+    first, second = db.added
+
+    assert first.doc_metadata["order"] == 0
+    assert first.doc_metadata["section"] == "Section One"
+    assert first.doc_metadata["heading_path"] == ["Title", "Section One"]
+
+    assert second.doc_metadata["order"] == 1
+    assert second.doc_metadata["section"] == "Section Two"
+    assert second.doc_metadata["heading_path"] == ["Title", "Section Two"]
+
+
+def test_normalize_heading_strips_bmp_emojis_and_joiners():
+    raw = "⚡️ Fast Path \ufe0f\u200d\u2642\ufe0f"
+    assert normalize_heading(raw) == "Fast Path"
 
 
 def test_ingest_doc_sets_kb_source_and_metadata_fields():

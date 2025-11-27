@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Optional
 
 from llama_index.core import Document
@@ -13,6 +14,86 @@ from app.services.text_embedder import embed_text
 from app.settings import settings
 
 logger = logging.getLogger(__name__)
+
+
+_EMOJI_RANGES = (
+    (0x1F1E6, 0x1F1FF),  # flags
+    (0x1F300, 0x1F5FF),  # symbols & pictographs
+    (0x1F600, 0x1F64F),  # emoticons
+    (0x1F680, 0x1F6FF),  # transport & map
+    (0x1F700, 0x1F77F),  # alchemical
+    (0x1F780, 0x1F7FF),  # geometric ext
+    (0x1F800, 0x1F8FF),  # arrows ext
+    (0x1F900, 0x1F9FF),  # supplemental symbols
+    (0x1FA00, 0x1FA6F),  # chess + more
+    (0x1FA70, 0x1FAFF),  # pictographs ext
+    (0x1FB00, 0x1FBFF),  # symbols for legacy computing
+    (0x1F3FB, 0x1F3FF),  # skin tone modifiers
+    (0x2600, 0x26FF),  # misc symbols (includes gender signs)
+    (0x2700, 0x27BF),  # dingbats
+    (0xFE00, 0xFE0F),  # variation selectors
+)
+
+
+def _is_emoji_char(ch: str) -> bool:
+    cp = ord(ch)
+    if cp == 0x200D:  # zero width joiner
+        return True
+    return any(start <= cp <= end for start, end in _EMOJI_RANGES)
+
+
+def normalize_heading(text: str) -> str:
+    """Strip emoji-like glyphs and collapse whitespace for cleaner embeddings."""
+
+    cleaned = "".join(ch for ch in text if not _is_emoji_char(ch))
+    collapsed = " ".join(cleaned.split())
+    return collapsed.strip()
+
+
+def extract_sections(text: str):
+    """Return markdown headings with their level and start index."""
+
+    pattern = r"^(#{1,6})\s+(.*)$"
+    sections = []
+    offset = 0
+
+    for line in text.splitlines(keepends=True):
+        match = re.match(pattern, line)
+        if match:
+            level = len(match.group(1))
+            raw_title = match.group(2).strip()
+            title = normalize_heading(raw_title) or raw_title
+            sections.append((level, title, offset))
+        offset += len(line)
+
+    return sections
+
+
+def map_chunks_to_sections(content: str, chunks: list[str], sections):
+    """Attach nearest heading info to each chunk using character offsets."""
+
+    chunk_sections = {}
+    chunk_heading_paths = {}
+
+    for i, chunk in enumerate(chunks):
+        snippet = chunk[:50]
+        pos = content.find(snippet)
+        if pos == -1:
+            pos = 0
+
+        stack = []
+        for level, heading, start in sections:
+            if start <= pos:
+                while stack and stack[-1][0] >= level:
+                    stack.pop()
+                stack.append((level, heading))
+            else:
+                break
+
+        chunk_sections[i] = stack[-1][1] if stack else None
+        chunk_heading_paths[i] = [h for _, h in stack]
+
+    return chunk_sections, chunk_heading_paths
 
 
 def ingest_doc(
@@ -43,10 +124,14 @@ def ingest_doc(
 
     # Chunk + embed
     chunks = chunk_text_fn(content)
+    sections = extract_sections(content)
+    chunk_sections, chunk_heading_paths = map_chunks_to_sections(
+        content, chunks, sections
+    )
     new_docs = []
     success_count = 0
 
-    for chunk in chunks:
+    for i, chunk in enumerate(chunks):
         try:
             # Enhance content with metadata before embedding
             enhanced_content = enhance_content(
@@ -66,6 +151,9 @@ def ingest_doc(
                     content=chunk,  # Store original content for display
                     embedding=embedding,
                     doc_metadata={
+                        "order": i,
+                        "section": chunk_sections.get(i),
+                        "heading_path": chunk_heading_paths.get(i, []),
                         "tags": post_data.get("tags", []),
                         "created_at": post_data.get("publishedAt"),
                         "updated_at": post_data.get("updatedAt"),
