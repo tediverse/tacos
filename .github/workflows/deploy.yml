@@ -7,7 +7,7 @@ on:
 
 jobs:
   deploy:
-    uses: tediverse/cicd/.github/workflows/deploy-fastapi.yml@main
+    uses: tedawf/cicd/.github/workflows/deploy-fastapi.yml@main
     with:
       service_name: tacos.service
       app_dir: /opt/tacos
@@ -17,4 +17,3 @@ jobs:
     secrets:
       LXC_HOST: ${{ secrets.LXC_HOST }}
       ENV_FILE: ${{ secrets.ENV_FILE }}
-      GH_RUNNER_KEY: ${{ secrets.GH_RUNNER_KEY }}
